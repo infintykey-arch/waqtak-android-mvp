@@ -1,0 +1,539 @@
+package com.wirdi.app;
+
+import android.Manifest;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.app.TimePickerDialog;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupMenu;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.AdListener;
+import com.google.android.gms.ads.AdLoader;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdSize;
+import com.google.android.gms.ads.AdView;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
+import com.google.android.gms.ads.nativead.AdChoicesView;
+import com.google.android.gms.ads.nativead.NativeAd;
+import com.google.android.gms.ads.nativead.NativeAdOptions;
+import com.google.android.gms.ads.nativead.NativeAdView;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.UUID;
+
+public class MainActivity extends Activity {
+    private static final int REQ_STUDY = 505;
+    private static final int REQ_VIDEO = 404;
+    private static final int REQ_NOTIFICATIONS = 606;
+    private static final int REQ_RINGTONE = 707;
+    private static final String[] WEEKDAY_SHORT = {"أحد", "إثن", "ثلا", "أرب", "خمي", "جمع", "سبت"};
+    private static final String[] WEEKDAY_FULL = {"الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"};
+    private ArrayList<StudyCard> cards = new ArrayList<>();
+    private LinearLayout content, grid;
+    private FrameLayout mainArea;
+    private AdView banner;
+    private InterstitialAd interstitial;
+    private final ArrayList<NativeAd> nativeAds = new ArrayList<>();
+    private final ArrayList<FrameLayout> nativeAdSlots = new ArrayList<>();
+    private final Handler adHandler = new Handler(Looper.getMainLooper());
+    private final Set<FrameLayout> nativeAdsLoading = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<FrameLayout> nativeAdsLoadedSlots = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<FrameLayout, Integer> nativeAdRetryCounts = new IdentityHashMap<>();
+    private final Map<FrameLayout, Runnable> nativeAdRetryCallbacks = new IdentityHashMap<>();
+    private static final int MAX_NATIVE_AD_RETRIES = 2;
+    private static final int MAX_STANDARD_AD_RETRIES = 3;
+    private int renderGeneration = 0;
+    private int columns = 2;
+    private boolean adsInitialized = false;
+    private boolean activityResumed = false;
+    private boolean bannerRequestInFlight = false;
+    private boolean bannerLoaded = false;
+    private int bannerRetryCount = 0;
+    private Runnable bannerRetryCallback;
+    private boolean interstitialRequestInFlight = false;
+    private int interstitialRetryCount = 0;
+    private Runnable interstitialRetryCallback;
+    private boolean exactAlarmPermissionGranted;
+    private Dialog formDialog;
+    private EditText nameField, youtubeField;
+    private TextView fileLabel, timeLabel, minutesLabel;
+    private LinearLayout youtubeGroup, localGroup, colorOptions, weekdayOptions;
+    private String formSource = "youtube";
+    private Uri selectedLocalUri;
+    private String selectedLocalName = "";
+    private StudyCard editingCard;
+    private int formColor;
+    private String formTime = "19:00";
+    private int formWeekdaysMask = StudyCard.ALL_WEEKDAYS;
+    private int formMinutes = 20;
+
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        getWindow().setStatusBarColor(Ui.BG); getWindow().setNavigationBarColor(Ui.BG);
+        getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+        AlarmReceiver.ensureChannel(this);
+        cards = StudyStore.load(this);
+        exactAlarmPermissionGranted = canScheduleExactAlarms();
+        AlarmScheduler.scheduleAll(this, cards);
+        buildHome(); renderLoadedCards();
+        handleStartIntent(getIntent());
+        mainArea.postOnAnimation(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            MobileAds.initialize(this, status -> runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                adsInitialized = true;
+                loadBanner();
+                loadNativeAds();
+                loadInterstitial();
+            }));
+        });
+    }
+
+    private void buildHome() {
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Ui.BG);
+        root.addView(buildHeader(), new LinearLayout.LayoutParams(-1, Ui.dp(this,72)));
+        mainArea = new FrameLayout(this); root.addView(mainArea, new LinearLayout.LayoutParams(-1,0,1));
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
+        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(Ui.dp(this,16),Ui.dp(this,4),Ui.dp(this,16),Ui.dp(this,94));
+        scroll.addView(content, new ScrollView.LayoutParams(-1,-2));
+        mainArea.addView(scroll, new FrameLayout.LayoutParams(-1,-1));
+        TextView fab = Ui.text(this,"+",32,Color.WHITE,true); fab.setGravity(Gravity.CENTER); fab.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Ui.BLUE,Color.rgb(34,92,183)}));
+        fab.setBackground(Ui.shape(Ui.BLUE, Color.rgb(101,174,255), 99, this)); fab.setElevation(Ui.dp(this,8));
+        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(Ui.dp(this,60),Ui.dp(this,60),Gravity.BOTTOM|Gravity.END);
+        flp.setMargins(0,0,Ui.dp(this,22),Ui.dp(this,20)); mainArea.addView(fab,flp); fab.setOnClickListener(v -> showForm(null));
+        root.addView(buildBanner(), new LinearLayout.LayoutParams(-1,Ui.dp(this,68)));
+        setContentView(root);
+    }
+
+    private View buildHeader() {
+        LinearLayout bar = new LinearLayout(this); bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(Ui.dp(this,16),Ui.dp(this,7),Ui.dp(this,16),Ui.dp(this,6));
+        ImageView mark = new ImageView(this); mark.setImageResource(R.drawable.wirdi_splash); mark.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        mark.setBackground(Ui.shape(Ui.SURFACE,Ui.LINE,12,this)); mark.setClipToOutline(true);
+        bar.addView(mark,new LinearLayout.LayoutParams(Ui.dp(this,48),Ui.dp(this,48)));
+        LinearLayout brand = new LinearLayout(this); brand.setOrientation(LinearLayout.VERTICAL); brand.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = Ui.text(this,"وقتك",20,Ui.WHITE,true); TextView sub = Ui.text(this,"نظّم وقت المذاكرة",11,Ui.MUTED,false);
+        brand.addView(title); brand.addView(sub);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0,-2,1); blp.rightMargin=Ui.dp(this,10); bar.addView(brand,blp);
+        TextView clock = Ui.text(this,clockText(),13,Ui.SILVER,true); clock.setGravity(Gravity.CENTER); clock.setBackground(Ui.shape(Ui.SURFACE,Ui.LINE,30,this)); clock.setPadding(Ui.dp(this,10),0,Ui.dp(this,10),0);
+        bar.addView(clock,new LinearLayout.LayoutParams(-2,Ui.dp(this,36)));
+        long untilNextMinute=60_000L-(System.currentTimeMillis()%60_000L);
+        clock.postDelayed(new Runnable(){@Override public void run(){ if(!isFinishing()&&!isDestroyed()){clock.setText(clockText());clock.postDelayed(this,60_000L-(System.currentTimeMillis()%60_000L));} }},untilNextMinute);
+        return bar;
+    }
+
+    private View buildBanner() {
+        LinearLayout wrap = new LinearLayout(this); wrap.setOrientation(LinearLayout.VERTICAL); wrap.setGravity(Gravity.CENTER); wrap.setBackgroundColor(Color.rgb(8,12,19));
+        TextView label = Ui.text(this,"إعلان",9,Ui.MUTED,false); label.setGravity(Gravity.CENTER); wrap.addView(label,new LinearLayout.LayoutParams(-1,Ui.dp(this,14)));
+        banner = new AdView(this); banner.setAdUnitId(getString(R.string.admob_banner_id)); banner.setAdSize(AdSize.BANNER);
+        banner.setAdListener(new AdListener(){
+            @Override public void onAdLoaded(){bannerRequestInFlight=false;bannerLoaded=true;bannerRetryCount=0;cancelBannerRetry();}
+            @Override public void onAdFailedToLoad(LoadAdError error){bannerRequestInFlight=false;bannerLoaded=false;android.util.Log.w("MidadBannerAd","Banner ad failed: "+error.getCode()+" / "+error.getMessage());scheduleBannerRetry();}
+        });
+        wrap.addView(banner,new LinearLayout.LayoutParams(-2,Ui.dp(this,50)));
+        return wrap;
+    }
+
+    private void loadBanner() {
+        if(!adsInitialized || !activityResumed || banner==null || bannerRequestInFlight || bannerLoaded || bannerRetryCallback!=null)return;
+        bannerRequestInFlight=true;
+        banner.loadAd(new AdRequest.Builder().build());
+    }
+
+    private void scheduleBannerRetry() {
+        if(!activityResumed || bannerRetryCount>=MAX_STANDARD_AD_RETRIES || bannerRetryCallback!=null)return;
+        int retry=++bannerRetryCount;
+        bannerRetryCallback=()->{bannerRetryCallback=null;if(activityResumed)loadBanner();};
+        adHandler.postDelayed(bannerRetryCallback,adRetryDelayMillis(retry));
+    }
+
+    private void cancelBannerRetry() {
+        if(bannerRetryCallback!=null){adHandler.removeCallbacks(bannerRetryCallback);bannerRetryCallback=null;}
+    }
+
+    private long adRetryDelayMillis(int retryCount) {
+        return 15_000L*(1L<<Math.min(4,Math.max(0,retryCount-1)));
+    }
+
+    private void render() {
+        cards = StudyStore.load(this);
+        renderLoadedCards();
+    }
+
+    private void renderLoadedCards() {
+        renderHero(); renderPermissions(); renderSoundSettings(); renderCards();
+    }
+
+    private void renderSoundSettings() {
+        View old = content.findViewWithTag("sound-settings"); if (old != null) content.removeView(old);
+        LinearLayout box = new LinearLayout(this); box.setTag("sound-settings"); box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this,14),Ui.dp(this,11),Ui.dp(this,14),Ui.dp(this,12));
+        box.setBackground(Ui.gradient(Color.rgb(18,29,43),Color.rgb(12,19,29),Ui.LINE,16,this));
+        TextView title = Ui.text(this,"نغمة الإشعار",14,Ui.WHITE,true); box.addView(title);
+        TextView description = Ui.text(this,"اختر الصوت الذي يصدر عند موعد التنبيه.",11,Ui.MUTED,false);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1,Ui.dp(this,25)); dlp.topMargin=Ui.dp(this,2); box.addView(description,dlp);
+        LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView current = Ui.text(this,AlarmReceiver.selectedSoundName(this),12,Ui.SILVER,true);
+        current.setMaxLines(1); current.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        row.addView(current,new LinearLayout.LayoutParams(0,Ui.dp(this,42),1));
+        Button change = Ui.button(this,"تغيير النغمة",Ui.BLUE,Color.WHITE);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2,Ui.dp(this,40)); clp.rightMargin=Ui.dp(this,8); row.addView(change,clp);
+        change.setOnClickListener(v->openRingtonePicker()); box.addView(row);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=Ui.dp(this,15); content.addView(box,lp);
+    }
+
+    private void openRingtonePicker() {
+        Intent picker = new Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,RingtoneManager.TYPE_NOTIFICATION|RingtoneManager.TYPE_ALARM)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE,"اختر نغمة الإشعار")
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT,true)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI,RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,false)
+                .putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,AlarmReceiver.selectedSoundUri(this));
+        try { startActivityForResult(picker,REQ_RINGTONE); }
+        catch (Exception e) { Toast.makeText(this,"تعذر فتح قائمة النغمات على هذا الجهاز.",Toast.LENGTH_LONG).show(); }
+    }
+
+    private void renderHero() {
+        View old = content.findViewWithTag("hero"); int oldIndex=old==null?content.getChildCount():content.indexOfChild(old); if (old != null) content.removeView(old);
+        LinearLayout hero = new LinearLayout(this); hero.setTag("hero"); hero.setOrientation(LinearLayout.VERTICAL); hero.setPadding(Ui.dp(this,18),Ui.dp(this,16),Ui.dp(this,18),Ui.dp(this,16));
+        hero.setBackground(Ui.gradient(Color.rgb(23,40,62),Color.rgb(13,20,31),Ui.LINE,21,this));
+        TextView label = Ui.text(this,cards.isEmpty()?"خطتك اليومية":"التنبيه القادم",12,Ui.SILVER,false); hero.addView(label);
+        if (cards.isEmpty()) {
+            TextView msg = Ui.text(this,"أضف أول كورس، وحدد وقت التنبيه وأيامه.",17,Ui.WHITE,true); msg.setMaxLines(2);
+            LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(-1,Ui.dp(this,70)); mp.topMargin=Ui.dp(this,7); hero.addView(msg,mp);
+            TextView action = Ui.text(this,"＋  إضافة كورس",13,Ui.BLUE,true); hero.addView(action); action.setOnClickListener(v->showForm(null));
+        } else {
+            StudyCard next = getNextCard();
+            LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL); row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout info = new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL);
+            TextView name = Ui.text(this,next.name,19,Ui.WHITE,true); name.setMaxLines(1); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            TextView when = Ui.text(this,(next.doneToday()?"أُنجز اليوم":"بعد "+until(AlarmScheduler.nextAlarmTimeMillis(next)))+" · "+next.dailyMinutes+" دقيقة",12,Ui.MUTED,false);
+            info.addView(name); LinearLayout.LayoutParams wlp=new LinearLayout.LayoutParams(-1,Ui.dp(this,30)); wlp.topMargin=Ui.dp(this,5); info.addView(when,wlp);
+            row.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+            TextView time = Ui.text(this,fmtTime(next.scheduledTime),17,Ui.BLUE,true); time.setGravity(Gravity.CENTER); time.setBackground(Ui.shape(Color.rgb(10,22,39),Ui.LINE,15,this));
+            row.addView(time,new LinearLayout.LayoutParams(Ui.dp(this,112),Ui.dp(this,52)));
+            LinearLayout.LayoutParams rlp=new LinearLayout.LayoutParams(-1,-2); rlp.topMargin=Ui.dp(this,14); hero.addView(row,rlp);
+        }
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=Ui.dp(this,11); content.addView(hero,Math.min(oldIndex,content.getChildCount()),lp);
+    }
+
+    private void renderPermissions() {
+        View old = content.findViewWithTag("permissions"); if (old != null) content.removeView(old);
+        boolean notif = Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==PackageManager.PERMISSION_GRANTED;
+        boolean exact = Build.VERSION.SDK_INT < 31 || ((android.app.AlarmManager)getSystemService(ALARM_SERVICE)).canScheduleExactAlarms();
+        boolean full = Build.VERSION.SDK_INT < 34 || getSystemService(android.app.NotificationManager.class).canUseFullScreenIntent();
+        boolean good = notif && exact && full;
+        LinearLayout box = new LinearLayout(this); box.setTag("permissions"); box.setGravity(Gravity.CENTER_VERTICAL); box.setPadding(Ui.dp(this,12),Ui.dp(this,9),Ui.dp(this,12),Ui.dp(this,9));
+        box.setBackground(Ui.shape(good?Color.rgb(11,37,36):Color.rgb(43,32,17),good?Color.rgb(25,91,82):Color.rgb(105,74,33),15,this));
+        TextView indicator = Ui.text(this,good?"✓":"!",17,good?Ui.GREEN:Color.rgb(255,190,89),true); indicator.setGravity(Gravity.CENTER);
+        box.addView(indicator,new LinearLayout.LayoutParams(Ui.dp(this,26),Ui.dp(this,30)));
+        TextView status = Ui.text(this,good?"تنبيهات شاشة القفل جاهزة":"فعّل إذن التنبيه الدقيق والظهور فوق القفل",11,good?Ui.GREEN:Color.rgb(255,208,138),true); status.setMaxLines(2);
+        box.addView(status,new LinearLayout.LayoutParams(0,Ui.dp(this,38),1));
+        TextView setup = Ui.text(this,good?"فحص":"ضبط",11,Ui.WHITE,true); setup.setGravity(Gravity.CENTER); setup.setBackground(Ui.shape(good?Color.rgb(22,64,62):Color.rgb(88,57,24),Color.TRANSPARENT,12,this));
+        box.addView(setup,new LinearLayout.LayoutParams(Ui.dp(this,56),Ui.dp(this,34))); box.setOnClickListener(v->requestAlarmPermissions());
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2); lp.bottomMargin=Ui.dp(this,17); content.addView(box,lp);
+    }
+
+    private void renderCards() {
+        if (grid != null) content.removeView(grid);
+        renderGeneration++;
+        clearNativeAdTracking();
+        for(NativeAd ad:nativeAds) try{ad.destroy();}catch(Exception ignored){} nativeAds.clear();
+        nativeAdSlots.clear();
+        LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL); heading.setTag("heading");
+        TextView title = Ui.text(this,"خطط المذاكرة",16,Ui.WHITE,true);
+        TextView count = Ui.text(this,"عدد الخطط: "+cards.size(),11,Ui.MUTED,false); count.setGravity(Gravity.CENTER);
+        heading.addView(title,new LinearLayout.LayoutParams(0,Ui.dp(this,36),1)); heading.addView(count);
+        View oldHeading=content.findViewWithTag("heading"); if(oldHeading!=null)content.removeView(oldHeading);
+        LinearLayout.LayoutParams hlp=new LinearLayout.LayoutParams(-1,-2); hlp.bottomMargin=Ui.dp(this,8); content.addView(heading,hlp);
+        grid = new LinearLayout(this); grid.setOrientation(LinearLayout.VERTICAL); grid.setTag("grid"); grid.setClipChildren(false); grid.setClipToPadding(false);
+        LinearLayout.LayoutParams glp=new LinearLayout.LayoutParams(-1,-2); content.addView(grid,glp);
+        int generation=renderGeneration;
+        if(cards.isEmpty()) {
+            TextView empty=Ui.text(this,"لا توجد كورسات بعد. اضغط + لإضافة أول كورس.",14,Ui.MUTED,false); empty.setGravity(Gravity.CENTER); empty.setBackground(Ui.shape(Ui.SURFACE,Ui.LINE,18,this));
+            LinearLayout.LayoutParams elp=new LinearLayout.LayoutParams(-1,Ui.dp(this,120)); grid.addView(empty,elp); addNativeAdSlot(generation); return;
+        }
+        int widthPx=getResources().getDisplayMetrics().widthPixels-Ui.dp(this,32); int widthDp=(int)(widthPx/getResources().getDisplayMetrics().density);
+        columns=widthDp>=780?4:(widthDp>=520?3:2);
+        int gap=Ui.dp(this,9), cell=(widthPx-gap*(columns-1))/columns;
+        LinearLayout row=newRow(); int used=0, rowItems=0;
+        for(int i=0;i<cards.size();i++) {
+            StudyCard c=cards.get(i); int span=Math.max(1,Math.min(columns,c.span));
+            if(rowItems>0 && used+span>columns){addRow(row);row=newRow();used=0;rowItems=0;}
+            int itemWidth=cell*span+gap*(span-1);
+            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(itemWidth,itemWidth); if(rowItems>0) cp.leftMargin=gap;
+            row.addView(createCardTile(c),cp); used+=span; rowItems++;
+            if((i+1)%5==0) {
+                if(rowItems>0){addRow(row);row=newRow();used=0;rowItems=0;}
+                addNativeAdSlot(generation);
+            }
+        }
+        if(rowItems>0)addRow(row);
+        if(cards.size()>0 && cards.size()<5) {
+            addNativeAdSlot(generation);
+        }
+    }
+
+    private void addNativeAdSlot(int generation) {
+        FrameLayout slot=createNativeAdSlot();
+        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,Ui.dp(this,132));
+        slp.topMargin=Ui.dp(this,4); slp.bottomMargin=Ui.dp(this,10);
+        grid.addView(slot,slp); nativeAdSlots.add(slot);
+        if(adsInitialized) loadNativeAd(slot,generation);
+    }
+
+    private void clearNativeAdTracking() {
+        for(Runnable retry:nativeAdRetryCallbacks.values()) adHandler.removeCallbacks(retry);
+        nativeAdRetryCallbacks.clear(); nativeAdRetryCounts.clear();
+        nativeAdsLoading.clear(); nativeAdsLoadedSlots.clear();
+    }
+
+    private LinearLayout newRow(){LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);row.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);row.setGravity(Gravity.TOP);row.setClipChildren(false);return row;}
+    private void addRow(LinearLayout row){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=Ui.dp(this,9);grid.addView(row,p);}
+
+    private View createCardTile(StudyCard c) {
+        FrameLayout outer=new FrameLayout(this); outer.setTag(c.id); int accent=Color.parseColor(StudyCard.COLORS[c.colorIndex]);
+        outer.setBackground(Ui.gradient(Color.rgb(20,29,42),Color.rgb(13,19,29),Ui.LINE,18,this)); outer.setClipToOutline(true);
+        LinearLayout column=new LinearLayout(this); column.setOrientation(LinearLayout.VERTICAL); column.setPadding(Ui.dp(this,10),Ui.dp(this,9),Ui.dp(this,10),Ui.dp(this,9));
+        outer.addView(column,new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView mark=Ui.text(this,"◆",12,accent,true);mark.setGravity(Gravity.CENTER);top.addView(mark,new LinearLayout.LayoutParams(Ui.dp(this,23),Ui.dp(this,24)));
+        TextView more=Ui.text(this,"⋮",22,Ui.MUTED,true);more.setGravity(Gravity.CENTER);top.addView(more,new LinearLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,28)));
+        LinearLayout.LayoutParams topText=new LinearLayout.LayoutParams(0,Ui.dp(this,27),1);topText.rightMargin=Ui.dp(this,5);
+        TextView mini=Ui.text(this,c.weekdaysMask==StudyCard.ALL_WEEKDAYS?"كل الأيام":"أيام مختارة",10,Ui.MUTED,false);top.addView(mini,topText);
+        column.addView(top); more.setOnClickListener(v->showCardMenu(v,c));
+        TextView name=Ui.text(this,c.name,14,Ui.WHITE,true); name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-1,0,1);nlp.topMargin=Ui.dp(this,3);column.addView(name,nlp);
+        LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER_VERTICAL);chips.setOrientation(LinearLayout.HORIZONTAL);
+        TextView time=Ui.text(this,fmtTime(c.scheduledTime),10,Ui.SILVER,true);time.setGravity(Gravity.CENTER);time.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,22,this));time.setPadding(Ui.dp(this,7),0,Ui.dp(this,7),0);
+        chips.addView(time,new LinearLayout.LayoutParams(-2,Ui.dp(this,23)));
+        TextView mins=Ui.text(this,c.dailyMinutes+" د",10,Ui.MUTED,false);mins.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(-2,Ui.dp(this,23));mlp.rightMargin=Ui.dp(this,5);chips.addView(mins,mlp);
+        if(c.doneToday()){TextView done=Ui.text(this,"✓",10,Ui.GREEN,true);done.setGravity(Gravity.CENTER);done.setBackground(Ui.shape(Color.rgb(13,48,41),Color.TRANSPARENT,20,this));chips.addView(done,new LinearLayout.LayoutParams(Ui.dp(this,24),Ui.dp(this,23)));}
+        column.addView(chips);
+        ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setTag("card-progress");progress.setMax(100);progress.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE2));
+        progress.setProgress((int)Math.min(100,c.elapsedToday*100/Math.max(1,c.dailyMinutes*60L)));LinearLayout.LayoutParams prp=new LinearLayout.LayoutParams(-1,Ui.dp(this,4));prp.topMargin=Ui.dp(this,7);column.addView(progress,prp);
+        TextView start=Ui.text(this,c.doneToday()?"متابعة  ›":"ابدأ  ▶",11,Color.WHITE,true);start.setTag("card-start");start.setGravity(Gravity.CENTER);start.setBackground(Ui.shape(accent,Color.TRANSPARENT,18,this));
+        LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,Ui.dp(this,32));stp.topMargin=Ui.dp(this,7);column.addView(start,stp);start.setOnClickListener(v->openStudy(c));
+        outer.setOnClickListener(v->showForm(c)); return outer;
+    }
+
+    private void showCardMenu(View anchor,StudyCard card) {
+        PopupMenu menu=new PopupMenu(this,anchor);menu.getMenu().add("تعديل الكورس");menu.getMenu().add(card.span==1?"تكبير البطاقة":"إعادة البطاقة إلى الحجم المربع");menu.getMenu().add("حذف الكورس");
+        menu.setOnMenuItemClickListener(item->{String s=item.getTitle().toString();if(s.startsWith("تعديل"))showForm(card);else if(s.startsWith("تكبير")||s.startsWith("إعادة")){card.span=card.span==1?columns:1;saveCards();render();}else confirmDelete(card);return true;});menu.show();
+    }
+
+    private void refreshAfterStudy() {
+        cards=StudyStore.load(this);
+        renderHero();
+        if(grid==null)return;
+        for(int i=0;i<grid.getChildCount();i++) {
+            View child=grid.getChildAt(i);
+            if(!(child instanceof LinearLayout))continue;
+            LinearLayout row=(LinearLayout)child;
+            for(int j=0;j<row.getChildCount();j++) {
+                View tile=row.getChildAt(j); Object tag=tile.getTag();
+                if(!(tag instanceof String))continue;
+                StudyCard updated=null;
+                for(StudyCard card:cards)if(card.id.equals(tag)){updated=card;break;}
+                if(updated==null)continue;
+                View replacement=createCardTile(updated); replacement.setTag(updated.id);
+                ViewGroup.LayoutParams params=tile.getLayoutParams();
+                row.removeViewAt(j); row.addView(replacement,j,params);
+            }
+        }
+    }
+
+    private FrameLayout createNativeAdSlot() {
+        FrameLayout slot=new FrameLayout(this);slot.setBackground(Ui.gradient(Color.rgb(14,21,31),Color.rgb(10,15,23),Ui.LINE,16,this));
+        LinearLayout inside=new LinearLayout(this);inside.setGravity(Gravity.CENTER_VERTICAL);inside.setPadding(Ui.dp(this,14),Ui.dp(this,10),Ui.dp(this,14),Ui.dp(this,10));
+        TextView mark=Ui.text(this,"إعلان",10,Ui.SILVER,true);mark.setGravity(Gravity.CENTER);mark.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,18,this));inside.addView(mark,new LinearLayout.LayoutParams(Ui.dp(this,49),Ui.dp(this,27)));
+        TextView text=Ui.text(this,"جارٍ تحميل محتوى مدعوم",11,Ui.MUTED,false);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);lp.rightMargin=Ui.dp(this,9);inside.addView(text,lp);slot.addView(inside,new FrameLayout.LayoutParams(-1,-1));return slot;
+    }
+
+    private void loadNativeAd(FrameLayout slot,int generation) {
+        if(!adsInitialized || isFinishing() || isDestroyed() || generation!=renderGeneration || slot.getParent()==null
+                || nativeAdsLoading.contains(slot) || nativeAdsLoadedSlots.contains(slot) || nativeAdRetryCallbacks.containsKey(slot))return;
+        nativeAdsLoading.add(slot);
+        AdLoader loader=new AdLoader.Builder(this,getString(R.string.admob_native_id)).forNativeAd(ad->{
+            nativeAdsLoading.remove(slot);
+            if(isFinishing() || isDestroyed() || generation!=renderGeneration || slot.getParent()==null){ad.destroy();return;}
+            nativeAdsLoadedSlots.add(slot); nativeAdRetryCounts.remove(slot);
+            nativeAds.add(ad); slot.removeAllViews();
+            NativeAdView view=new NativeAdView(this); LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(Ui.dp(this,12),Ui.dp(this,26),Ui.dp(this,12),Ui.dp(this,8));
+            LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
+            TextView adLabel=Ui.text(this,"إعلان",9,Ui.SILVER,true);adLabel.setGravity(Gravity.CENTER);adLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,18,this));top.addView(adLabel,new LinearLayout.LayoutParams(Ui.dp(this,43),Ui.dp(this,22)));
+            TextView headline=Ui.text(this,"",12,Ui.WHITE,true);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,Ui.dp(this,28),1);hp.rightMargin=Ui.dp(this,9);top.addView(headline,hp);body.addView(top);
+            TextView desc=Ui.text(this,"",10,Ui.MUTED,false);desc.setMaxLines(1);body.addView(desc,new LinearLayout.LayoutParams(-1,Ui.dp(this,21)));
+            Button cta=Ui.button(this,"معرفة المزيد",Ui.BLUE,Color.WHITE);LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,Ui.dp(this,30));cp.topMargin=Ui.dp(this,3);body.addView(cta,cp);
+            view.addView(body,new FrameLayout.LayoutParams(-1,-1));
+            AdChoicesView choices=new AdChoicesView(this); FrameLayout.LayoutParams choicesLp=new FrameLayout.LayoutParams(Ui.dp(this,36),Ui.dp(this,22),Gravity.TOP|Gravity.END); view.addView(choices,choicesLp); view.setAdChoicesView(choices);
+            view.setHeadlineView(headline);view.setBodyView(desc);view.setCallToActionView(cta);view.setNativeAd(ad);slot.addView(view,new FrameLayout.LayoutParams(-1,-1));
+        }).withAdListener(new AdListener(){@Override public void onAdFailedToLoad(LoadAdError error){
+            nativeAdsLoading.remove(slot);
+            android.util.Log.w("MidadNativeAd","Native ad failed: "+error.getCode()+" / "+error.getMessage());
+            if(isFinishing() || isDestroyed() || generation!=renderGeneration || slot.getParent()==null)return;
+            TextView t=Ui.text(MainActivity.this,"الإعلان غير متاح حاليًا؛ ستتم إعادة المحاولة",10,Ui.MUTED,false);t.setGravity(Gravity.CENTER);
+            slot.removeAllViews();slot.addView(t,new FrameLayout.LayoutParams(-1,-1));
+            Integer previous=nativeAdRetryCounts.get(slot); int retryCount=(previous==null?0:previous)+1;
+            nativeAdRetryCounts.put(slot,retryCount);
+            if(retryCount<=MAX_NATIVE_AD_RETRIES){
+                Runnable retry=()->{nativeAdRetryCallbacks.remove(slot);if(slot.isAttachedToWindow())loadNativeAd(slot,generation);};
+                nativeAdRetryCallbacks.put(slot,retry);adHandler.postDelayed(retry,15_000L*retryCount);
+            }
+        }}).withNativeAdOptions(new NativeAdOptions.Builder().build()).build();
+        loader.loadAd(new AdRequest.Builder().build());
+    }
+
+    private void loadNativeAds() {
+        int generation=renderGeneration;
+        for(FrameLayout slot:new ArrayList<>(nativeAdSlots)) loadNativeAd(slot,generation);
+    }
+
+    private void loadInterstitial() {
+        if(!adsInitialized || !activityResumed || isFinishing() || isDestroyed() || interstitial!=null || interstitialRequestInFlight || interstitialRetryCallback!=null)return;
+        interstitialRequestInFlight=true;
+        InterstitialAd.load(this,getString(R.string.admob_interstitial_id),new AdRequest.Builder().build(),new InterstitialAdLoadCallback(){
+            @Override public void onAdLoaded(InterstitialAd ad){interstitialRequestInFlight=false;interstitialRetryCount=0;cancelInterstitialRetry();interstitial=ad;android.util.Log.i("MidadInterstitialAd","Interstitial ad loaded.");}
+            @Override public void onAdFailedToLoad(LoadAdError error){interstitialRequestInFlight=false;interstitial=null;android.util.Log.w("MidadInterstitialAd","Interstitial ad failed: "+error.getCode()+" / "+error.getMessage());scheduleInterstitialRetry();}
+        });
+    }
+
+    private void scheduleInterstitialRetry() {
+        if(!activityResumed || isFinishing() || isDestroyed() || interstitialRetryCount>=MAX_STANDARD_AD_RETRIES || interstitialRetryCallback!=null)return;
+        int retry=++interstitialRetryCount;
+        interstitialRetryCallback=()->{interstitialRetryCallback=null;loadInterstitial();};
+        adHandler.postDelayed(interstitialRetryCallback,adRetryDelayMillis(retry));
+    }
+
+    private void cancelInterstitialRetry() {
+        if(interstitialRetryCallback!=null){adHandler.removeCallbacks(interstitialRetryCallback);interstitialRetryCallback=null;}
+    }
+
+    private void showInterstitialAfterBreak() {
+        if(interstitial==null){loadInterstitial();return;}
+        interstitial.setFullScreenContentCallback(new FullScreenContentCallback(){
+            @Override public void onAdDismissedFullScreenContent(){interstitial=null;loadInterstitial();}
+            @Override public void onAdFailedToShowFullScreenContent(AdError e){android.util.Log.w("MidadInterstitialAd","Interstitial failed to show: "+e.getCode()+" / "+e.getMessage());interstitial=null;loadInterstitial();}
+        });
+        interstitial.show(this); interstitial=null;
+    }
+
+    private StudyCard getNextCard() {
+        StudyCard best=cards.get(0);long bestAt=AlarmScheduler.nextAlarmTimeMillis(best);
+        for(StudyCard c:cards){long at=AlarmScheduler.nextAlarmTimeMillis(c);if(at<bestAt){best=c;bestAt=at;}}
+        return best;
+    }
+    private String until(long alarmAt){try{long minutes=Math.max(0,(alarmAt-System.currentTimeMillis()+59_999L)/60_000L);long days=minutes/1440;long hours=(minutes%1440)/60;long remainder=minutes%60;if(days>0)return days+(days==1?" يوم":" أيام");if(hours==0)return remainder+" د";return hours+" س "+remainder+" د";}catch(Exception e){return "قريبًا";}}
+    private String fmtTime(String hm){try{String[] p=hm.split(":");int h=Integer.parseInt(p[0]),m=Integer.parseInt(p[1]);return ((h%12==0)?12:h%12)+":"+String.format(Locale.US,"%02d",m)+" "+(h<12?"ص":"م");}catch(Exception e){return hm;}}
+    private String clockText(){return new SimpleDateFormat("h:mm a",new Locale("ar")).format(new Date());}
+
+    private void requestAlarmPermissions() {
+        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},REQ_NOTIFICATIONS);return;}
+        if(Build.VERSION.SDK_INT>=31){android.app.AlarmManager am=(android.app.AlarmManager)getSystemService(ALARM_SERVICE);if(am!=null&&!am.canScheduleExactAlarms()){try{startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,Uri.parse("package:"+getPackageName())));}catch(Exception e){openAppSettings();}return;}}
+        if(Build.VERSION.SDK_INT>=34){android.app.NotificationManager nm=getSystemService(android.app.NotificationManager.class);if(nm!=null&&!nm.canUseFullScreenIntent()){try{startActivity(new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,Uri.parse("package:"+getPackageName())));}catch(Exception e){openAppSettings();}return;}}
+        Toast.makeText(this,"أذونات التنبيه الأساسية مفعّلة.",Toast.LENGTH_SHORT).show();
+    }
+    private boolean canScheduleExactAlarms(){if(Build.VERSION.SDK_INT<31)return true;android.app.AlarmManager am=(android.app.AlarmManager)getSystemService(ALARM_SERVICE);return am!=null&&am.canScheduleExactAlarms();}
+    private void openAppSettings(){try{startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:"+getPackageName())));}catch(Exception ignored){}}
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] results){super.onRequestPermissionsResult(requestCode,permissions,results);if(requestCode==REQ_NOTIFICATIONS){if(results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)requestAlarmPermissions();else Toast.makeText(this,"يلزم السماح بالإشعارات حتى يعمل المنبه.",Toast.LENGTH_LONG).show();render();}}
+    @Override protected void onResume(){super.onResume();activityResumed=true;if(banner!=null)banner.resume();boolean exactAlarmGranted=canScheduleExactAlarms();if(exactAlarmGranted!=exactAlarmPermissionGranted){exactAlarmPermissionGranted=exactAlarmGranted;cards=StudyStore.load(this);AlarmScheduler.scheduleAll(this,cards);}if(content!=null)renderPermissions();if(adsInitialized){loadBanner();loadNativeAds();if(interstitial==null)loadInterstitial();}}
+    @Override protected void onPause(){activityResumed=false;if(banner!=null)banner.pause();super.onPause();}
+
+    private void openStudy(StudyCard c){Intent i=new Intent(this,StudyActivity.class).putExtra(AlarmScheduler.EXTRA_ID,c.id);startActivityForResult(i,REQ_STUDY);}
+    private void handleStartIntent(Intent i){if(i==null)return;String id=i.getStringExtra("start_card_id");if(id!=null&&!id.isEmpty()){i.removeExtra("start_card_id");StudyCard c=StudyStore.find(this,id);if(c!=null)mainArea.postDelayed(()->openStudy(c),180);}}
+    @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleStartIntent(intent);}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==REQ_RINGTONE){if(resultCode==RESULT_OK&&data!=null){Uri picked=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);if(picked==null)picked=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);String title="نغمة الإشعار الافتراضية";try{Ringtone ringtone=RingtoneManager.getRingtone(this,picked);if(ringtone!=null)title=ringtone.getTitle(this);}catch(Exception ignored){}AlarmReceiver.saveSelectedSound(this,picked,title);renderSoundSettings();Toast.makeText(this,"تم تغيير نغمة الإشعار",Toast.LENGTH_SHORT).show();}return;}if(requestCode==REQ_VIDEO&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){selectedLocalUri=data.getData();try{getContentResolver().takePersistableUriPermission(selectedLocalUri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}selectedLocalName=displayName(selectedLocalUri);if(fileLabel!=null)fileLabel.setText(selectedLocalName);return;}if(requestCode==REQ_STUDY){refreshAfterStudy();if(resultCode==RESULT_OK&&data!=null&&data.getBooleanExtra("session_completed_today",false))showInterstitialAfterBreak();}}
+    @Override public void onBackPressed(){new AlertDialog.Builder(this).setMessage("هل تريد الخروج من وقتك؟").setNegativeButton("البقاء",(d,w)->d.dismiss()).setPositiveButton("خروج",(d,w)->finish()).show();}
+
+    private void showForm(StudyCard existing) {
+        editingCard=existing; formSource=existing==null?"youtube":existing.sourceType;formColor=existing==null?cards.size()%StudyCard.COLORS.length:existing.colorIndex;formTime=existing==null?"19:00":existing.scheduledTime;formWeekdaysMask=existing==null?StudyCard.ALL_WEEKDAYS:existing.weekdaysMask;formMinutes=existing==null?20:existing.dailyMinutes;
+        selectedLocalUri=(existing!=null&&"local".equals(existing.sourceType)&&!existing.localUri.isEmpty())?Uri.parse(existing.localUri):null;
+        selectedLocalName=existing==null?"":existing.localFileName;
+        Dialog dialog=new Dialog(this);formDialog=dialog;
+        ScrollView sc=new ScrollView(this);sc.setFillViewport(false);LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(Ui.dp(this,20),Ui.dp(this,19),Ui.dp(this,20),Ui.dp(this,23));panel.setBackground(Ui.shape(Ui.SURFACE,Ui.LINE,22,this));sc.addView(panel);
+        TextView handle=Ui.text(this,"━━━━━━━━",10,Ui.MUTED,false);handle.setGravity(Gravity.CENTER);panel.addView(handle,new LinearLayout.LayoutParams(-1,Ui.dp(this,17)));
+        TextView heading=Ui.text(this,existing==null?"كورس جديد":"تعديل الكورس",19,Ui.WHITE,true);LinearLayout.LayoutParams h=new LinearLayout.LayoutParams(-1,Ui.dp(this,43));h.bottomMargin=Ui.dp(this,8);panel.addView(heading,h);
+        addLabel(panel,"اسم الكورس");nameField=edit("مثال: كورس في الرياضيات",existing==null?"":existing.name,InputType.TYPE_CLASS_TEXT);panel.addView(nameField,fieldParams());
+        addLabel(panel,"مصدر الفيديو");LinearLayout switcher=new LinearLayout(this);switcher.setOrientation(LinearLayout.HORIZONTAL);
+        Button youtube=Ui.button(this,"رابط يوتيوب",Ui.SURFACE2,Ui.WHITE);Button local=Ui.button(this,"ملف من الجهاز",Ui.SURFACE2,Ui.WHITE);
+        LinearLayout.LayoutParams sw=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw.leftMargin=Ui.dp(this,4);switcher.addView(youtube,sw);LinearLayout.LayoutParams sw2=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw2.rightMargin=Ui.dp(this,4);switcher.addView(local,sw2);panel.addView(switcher);
+        youtubeGroup=new LinearLayout(this);youtubeGroup.setOrientation(LinearLayout.VERTICAL);addLabel(youtubeGroup,"رابط فيديو أو قائمة تشغيل");youtubeField=edit("youtube.com/watch?v=… أو /playlist?list=…",existing==null?"":existing.youtubeUrl,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);youtubeGroup.addView(youtubeField,fieldParams());
+        TextView youtubeHint=Ui.text(this,"الصق رابط فيديو منفرد أو قائمة تشغيل كاملة (Playlist).",10,Ui.MUTED,false);LinearLayout.LayoutParams youtubeHintLp=new LinearLayout.LayoutParams(-1,Ui.dp(this,26));youtubeHintLp.topMargin=Ui.dp(this,2);youtubeGroup.addView(youtubeHint,youtubeHintLp);panel.addView(youtubeGroup);
+        localGroup=new LinearLayout(this);localGroup.setOrientation(LinearLayout.VERTICAL);addLabel(localGroup,"ملف الفيديو");fileLabel=Ui.text(this,selectedLocalName.isEmpty()?"اضغط لاختيار فيديو من جهازك":selectedLocalName,12,Ui.SILVER,false);fileLabel.setGravity(Gravity.CENTER);fileLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));panel.addView(localGroup);localGroup.addView(fileLabel,new LinearLayout.LayoutParams(-1,Ui.dp(this,50)));fileLabel.setOnClickListener(v->pickVideo());
+        Runnable updateSource=()->{boolean yt="youtube".equals(formSource);youtubeGroup.setVisibility(yt?View.VISIBLE:View.GONE);localGroup.setVisibility(yt?View.GONE:View.VISIBLE);youtube.setBackground(Ui.shape(yt?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));local.setBackground(Ui.shape(!yt?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));};
+        youtube.setOnClickListener(v->{formSource="youtube";updateSource.run();});local.setOnClickListener(v->{formSource="local";updateSource.run();});updateSource.run();
+        addLabel(panel,"أيام تكرار المنبّه");weekdayOptions=new LinearLayout(this);weekdayOptions.setOrientation(LinearLayout.HORIZONTAL);weekdayOptions.setGravity(Gravity.CENTER);weekdayOptions.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);for(int i=0;i<WEEKDAY_SHORT.length;i++)addWeekdayOption(i);panel.addView(weekdayOptions,new LinearLayout.LayoutParams(-1,Ui.dp(this,40)));
+        TextView weekdayHint=Ui.text(this,"اختر يومًا واحدًا على الأقل",10,Ui.MUTED,false);LinearLayout.LayoutParams weekdayHintLp=new LinearLayout.LayoutParams(-1,Ui.dp(this,20));weekdayHintLp.topMargin=Ui.dp(this,2);panel.addView(weekdayHint,weekdayHintLp);
+        addLabel(panel,"وقت التنبيه");timeLabel=Ui.text(this,fmtTime(formTime)+"   ◷",15,Ui.WHITE,true);timeLabel.setGravity(Gravity.CENTER);timeLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));panel.addView(timeLabel,fieldParams());timeLabel.setOnClickListener(v->showTimePicker());
+        TextView timingNotice=Ui.text(this,"تنبيه: قد يرنّ المنبّه قبل الوقت المحدد أو بعده ببضع دقائق حسب الجهاز وإعدادات توفير الطاقة؛ لا يُضمن الرنين في الدقيقة نفسها.",11,Color.rgb(255,208,138),false);timingNotice.setPadding(Ui.dp(this,10),Ui.dp(this,7),Ui.dp(this,10),Ui.dp(this,7));timingNotice.setBackground(Ui.shape(Color.rgb(43,32,17),Color.rgb(105,74,33),12,this));LinearLayout.LayoutParams timingNoticeLp=new LinearLayout.LayoutParams(-1,-2);timingNoticeLp.topMargin=Ui.dp(this,6);panel.addView(timingNotice,timingNoticeLp);
+        addLabel(panel,"مدة المذاكرة اليومية");LinearLayout step=new LinearLayout(this);step.setGravity(Gravity.CENTER);Button minus=Ui.button(this,"−",Ui.SURFACE2,Ui.WHITE);Button plus=Ui.button(this,"+",Ui.SURFACE2,Ui.WHITE);minutesLabel=Ui.text(this,formMinutes+" دقيقة",16,Ui.WHITE,true);minutesLabel.setGravity(Gravity.CENTER);step.addView(minus,new LinearLayout.LayoutParams(Ui.dp(this,55),Ui.dp(this,42)));step.addView(minutesLabel,new LinearLayout.LayoutParams(0,Ui.dp(this,42),1));step.addView(plus,new LinearLayout.LayoutParams(Ui.dp(this,55),Ui.dp(this,42)));panel.addView(step);minus.setOnClickListener(v->{formMinutes=Math.max(5,formMinutes-5);minutesLabel.setText(formMinutes+" دقيقة");});plus.setOnClickListener(v->{formMinutes=Math.min(180,formMinutes+5);minutesLabel.setText(formMinutes+" دقيقة");});
+        addLabel(panel,"لون البطاقة");colorOptions=new LinearLayout(this);colorOptions.setGravity(Gravity.CENTER_VERTICAL);for(int i=0;i<StudyCard.COLORS.length;i++)addColorOption(i);panel.addView(colorOptions,new LinearLayout.LayoutParams(-1,Ui.dp(this,42)));
+        LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);LinearLayout.LayoutParams alp=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));alp.topMargin=Ui.dp(this,15);panel.addView(actions,alp);
+        Button cancel=Ui.button(this,"إلغاء",Ui.SURFACE2,Ui.SILVER);Button save=Ui.button(this,"حفظ الكورس",Ui.BLUE,Color.WHITE);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-1,1);ap.leftMargin=Ui.dp(this,5);actions.addView(cancel,ap);LinearLayout.LayoutParams ap2=new LinearLayout.LayoutParams(0,-1,1);ap2.rightMargin=Ui.dp(this,5);actions.addView(save,ap2);cancel.setOnClickListener(v->dialog.dismiss());save.setOnClickListener(v->saveForm(dialog));
+        dialog.setContentView(sc);android.view.Window w=dialog.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,Ui.dp(this,590));w.setGravity(Gravity.BOTTOM);w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);android.view.WindowManager.LayoutParams lp=w.getAttributes();lp.dimAmount=.62f;w.setAttributes(lp);}dialog.show();if(w!=null)w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,Math.min(Ui.dp(this,610),getResources().getDisplayMetrics().heightPixels-Ui.dp(this,60)));
+    }
+
+    private void addLabel(LinearLayout parent,String label){TextView t=Ui.text(this,label,12,Ui.MUTED,true);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,Ui.dp(this,28));lp.topMargin=Ui.dp(this,9);parent.addView(t,lp);}
+    private void addWeekdayOption(int index){TextView day=Ui.text(this,WEEKDAY_SHORT[index],10,Ui.WHITE,true);day.setGravity(Gravity.CENTER);day.setContentDescription(WEEKDAY_FULL[index]);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,Ui.dp(this,36),1);lp.leftMargin=Ui.dp(this,2);lp.rightMargin=Ui.dp(this,2);weekdayOptions.addView(day,lp);Runnable update=()->{boolean selected=(formWeekdaysMask&(1<<index))!=0;day.setSelected(selected);day.setContentDescription(WEEKDAY_FULL[index]+(selected?"، محدد":"، غير محدد"));day.setTextColor(selected?Color.WHITE:Ui.MUTED);day.setBackground(Ui.shape(selected?Ui.BLUE:Ui.SURFACE2,selected?Ui.BLUE:Ui.LINE,10,this));};update.run();day.setOnClickListener(v->{formWeekdaysMask^=1<<index;update.run();});}
+    private EditText edit(String hint,String value,int input){EditText e=new EditText(this);e.setSingleLine(true);e.setText(value);e.setHint(hint);e.setTextSize(14);e.setTextColor(Ui.WHITE);e.setHintTextColor(Ui.MUTED);e.setInputType(input);e.setPadding(Ui.dp(this,13),0,Ui.dp(this,13),0);e.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));return e;}
+    private LinearLayout.LayoutParams fieldParams(){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));lp.bottomMargin=Ui.dp(this,2);return lp;}
+    private void addColorOption(int index){TextView dot=Ui.text(this,"",10,Ui.WHITE,true);dot.setGravity(Gravity.CENTER);dot.setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[index]),index==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Ui.dp(this,29),Ui.dp(this,29));lp.leftMargin=Ui.dp(this,8);colorOptions.addView(dot,lp);dot.setOnClickListener(v->{formColor=index;for(int i=0;i<colorOptions.getChildCount();i++)colorOptions.getChildAt(i).setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[i]),i==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));});}
+    private void showTimePicker(){String[] t=formTime.split(":");int h=19,m=0;try{h=Integer.parseInt(t[0]);m=Integer.parseInt(t[1]);}catch(Exception ignored){}new TimePickerDialog(this,(view,hour,minute)->{formTime=String.format(Locale.US,"%02d:%02d",hour,minute);timeLabel.setText(fmtTime(formTime)+"   ◷");},h,m,false).show();}
+    private void pickVideo(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("video/*");try{startActivityForResult(i,REQ_VIDEO);}catch(Exception e){Toast.makeText(this,"تعذر فتح ملفات الجهاز.",Toast.LENGTH_SHORT).show();}}
+    private String displayName(Uri uri){try(android.database.Cursor c=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "فيديو من الجهاز";}
+    private void saveForm(Dialog dialog){
+        String name=nameField.getText().toString().trim();if(name.isEmpty()){nameField.setError("اكتب اسم الكورس");return;}
+        String url=youtubeField.getText().toString().trim();YoutubeLink parsedLink="youtube".equals(formSource)?YoutubeLink.parse(url):null;String vid=parsedLink==null?"":parsedLink.videoId;String playlistId=parsedLink==null?"":parsedLink.playlistId;
+        if("youtube".equals(formSource)&&parsedLink==null){youtubeField.setError("أدخل رابط فيديو أو قائمة تشغيل صحيحة من يوتيوب");return;}
+        if("local".equals(formSource)&&selectedLocalUri==null&&!(editingCard!=null&&!editingCard.localUri.isEmpty())){Toast.makeText(this,"اختر ملف فيديو أولًا.",Toast.LENGTH_SHORT).show();return;}
+        if(formWeekdaysMask==0){Toast.makeText(this,"اختر يومًا واحدًا على الأقل للمنبّه.",Toast.LENGTH_SHORT).show();return;}
+        StudyCard c=editingCard==null?new StudyCard():editingCard;if(editingCard==null){c.id=UUID.randomUUID().toString();c.elapsedToday=0;c.streak=0;}
+        c.name=name;c.sourceType=formSource;c.scheduledTime=formTime;c.weekdaysMask=formWeekdaysMask;c.dailyMinutes=formMinutes;c.colorIndex=formColor;
+        if("youtube".equals(formSource)){c.youtubeUrl=url;c.youtubeId=vid;c.youtubePlaylistId=playlistId;c.localUri="";c.localFileName="";}else{if(selectedLocalUri!=null){c.localUri=selectedLocalUri.toString();c.localFileName=selectedLocalName;}c.youtubeUrl="";c.youtubeId="";c.youtubePlaylistId="";}
+        if(editingCard==null)cards.add(c);saveCards();AlarmScheduler.scheduleDaily(this,c);dialog.dismiss();render();Toast.makeText(this,editingCard==null?"تمت إضافة الكورس":"تم حفظ التغييرات",Toast.LENGTH_SHORT).show();
+    }
+    private void saveCards(){StudyStore.save(this,cards);}
+    private void confirmDelete(StudyCard c){new AlertDialog.Builder(this).setTitle("حذف الكورس؟").setMessage("سيُحذف «"+c.name+"» وتقدّمه المحفوظ.").setNegativeButton("إلغاء",(d,w)->d.dismiss()).setPositiveButton("حذف",(d,w)->{cards.removeIf(x->x.id.equals(c.id));StudyStore.save(this,cards);AlarmScheduler.cancel(this,c.id);render();}).show();}
+
+    @Override protected void onDestroy(){activityResumed=false;cancelBannerRetry();cancelInterstitialRetry();renderGeneration++;clearNativeAdTracking();if(banner!=null)banner.destroy();for(NativeAd ad:nativeAds)try{ad.destroy();}catch(Exception ignored){}nativeAds.clear();super.onDestroy();}
+}

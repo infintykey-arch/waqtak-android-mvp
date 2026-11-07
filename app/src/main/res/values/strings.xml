@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">وقتك</string>
+    <string name="admob_app_id">ca-app-pub-8393179162461898~2331008570</string>
+    <string name="admob_banner_id">ca-app-pub-8393179162461898/4700638157</string>
+    <string name="admob_native_id">ca-app-pub-8393179162461898/2074474811</string>
+    <string name="admob_interstitial_id">ca-app-pub-8393179162461898/3310554924</string>
+</resources>
