@@ -40,6 +40,37 @@ public class StudyActivity extends Activity {
     private static final int GESTURE_VOLUME = 1;
     private static final int GESTURE_BRIGHTNESS = 2;
 
+    private static final class FitVideoView extends VideoView {
+        private int sourceWidth;
+        private int sourceHeight;
+
+        FitVideoView(Context context) { super(context); }
+
+        void setVideoSize(int width, int height) {
+            sourceWidth = width;
+            sourceHeight = height;
+            requestLayout();
+        }
+
+        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int availableWidth = MeasureSpec.getSize(widthMeasureSpec);
+            int availableHeight = MeasureSpec.getSize(heightMeasureSpec);
+            int videoWidth = sourceWidth;
+            int videoHeight = sourceHeight;
+            if (videoWidth <= 0 || videoHeight <= 0 || availableWidth <= 0 || availableHeight <= 0
+                    || MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                    || MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                return;
+            }
+
+            double scale = Math.min((double) availableWidth / videoWidth, (double) availableHeight / videoHeight);
+            int fittedWidth = Math.max(1, (int) Math.floor(videoWidth * scale));
+            int fittedHeight = Math.max(1, (int) Math.floor(videoHeight * scale));
+            setMeasuredDimension(fittedWidth, fittedHeight);
+        }
+    }
+
     private final Handler handler = new Handler();
     private String cardId = "";
     private StudyCard card;
@@ -75,7 +106,7 @@ public class StudyActivity extends Activity {
     private LinearLayout root, header, body, playerControls;
     private TextView stopButton;
     private FrameLayout mediaFrame;
-    private VideoView videoView;
+    private FitVideoView videoView;
     private MediaController localMediaController;
     private MediaPlayer localPlayer;
     private WebView webView;
@@ -151,13 +182,14 @@ public class StudyActivity extends Activity {
         videoHeight = Math.min(Ui.dp(this,260), Math.max(Ui.dp(this,165), getResources().getDisplayMetrics().widthPixels * 9 / 16));
         root.addView(mediaFrame, new LinearLayout.LayoutParams(-1, videoHeight));
         if ("local".equals(card.sourceType) && card.localUri != null && !card.localUri.isEmpty()) {
-            videoView = new VideoView(this); mediaFrame.addView(videoView, new FrameLayout.LayoutParams(-1,-1));
+            videoView = new FitVideoView(this); mediaFrame.addView(videoView, new FrameLayout.LayoutParams(-1,-1, Gravity.CENTER));
             videoView.setOnTouchListener(this::handlePlayerTouch);
             try {
                 videoView.setVideoURI(Uri.parse(card.localUri));
                 localMediaController = new MediaController(this); localMediaController.setAnchorView(videoView); videoView.setMediaController(localMediaController);
                 videoView.setOnPreparedListener(mp -> {
                     localReady = true; localPlayer = mp;
+                    videoView.setVideoSize(mp.getVideoWidth(), mp.getVideoHeight()); mediaFrame.requestLayout();
                     videoView.seekTo((int)(card.positionSeconds * 1000));
                     videoView.start();
                     setLocalPlaybackRate(desiredPlaybackRate);
@@ -403,6 +435,7 @@ public class StudyActivity extends Activity {
             playerControls.setBackgroundColor(0xCC101820);
             mediaFrame.addView(playerControls, new FrameLayout.LayoutParams(-1, Ui.dp(this,52), Gravity.BOTTOM));
             mediaFrame.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1));
+            mediaFrame.requestLayout(); videoView.requestLayout();
             decor.setSystemUiVisibility(fullscreenSystemUiFlags());
             if (lockLandscape) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             fullscreenButton.setText("⛶"); fullscreenButton.setContentDescription("إنهاء ملء الشاشة");
@@ -413,6 +446,7 @@ public class StudyActivity extends Activity {
             int insertAt = Math.max(0, Math.min(playerControlsIndex, root.getChildCount()));
             root.addView(playerControls, insertAt, new LinearLayout.LayoutParams(-1, Ui.dp(this,52)));
             mediaFrame.setLayoutParams(new LinearLayout.LayoutParams(-1, videoHeight));
+            mediaFrame.requestLayout(); videoView.requestLayout();
             decor.setSystemUiVisibility(originalSystemUiVisibility);
             if (forceLandscapeForFullscreen) setRequestedOrientation(initialRequestedOrientation);
             forceLandscapeForFullscreen = false;
