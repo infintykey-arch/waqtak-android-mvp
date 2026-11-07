@@ -61,6 +61,7 @@ public class StudyActivity extends Activity {
     private int gestureStartVolume;
     private int gestureMode = GESTURE_NONE;
     private int touchSlop;
+    private boolean playerTouchMoved = false;
     private int videoHeight;
     private int originalSystemUiVisibility;
     private int youtubeOriginalSystemUiVisibility;
@@ -75,6 +76,7 @@ public class StudyActivity extends Activity {
     private TextView stopButton;
     private FrameLayout mediaFrame;
     private VideoView videoView;
+    private MediaController localMediaController;
     private MediaPlayer localPlayer;
     private WebView webView;
     private View youtubeCustomView;
@@ -153,12 +155,13 @@ public class StudyActivity extends Activity {
             videoView.setOnTouchListener(this::handlePlayerTouch);
             try {
                 videoView.setVideoURI(Uri.parse(card.localUri));
-                MediaController controller = new MediaController(this); controller.setAnchorView(videoView); videoView.setMediaController(controller);
+                localMediaController = new MediaController(this); localMediaController.setAnchorView(videoView); videoView.setMediaController(localMediaController);
                 videoView.setOnPreparedListener(mp -> {
                     localReady = true; localPlayer = mp;
                     videoView.seekTo((int)(card.positionSeconds * 1000));
+                    videoView.start();
                     setLocalPlaybackRate(desiredPlaybackRate);
-                    videoView.start(); paused = false; updateToggle();
+                    paused = false; updateToggle();
                 });
                 videoView.setOnCompletionListener(mp -> { paused = true; updateToggle(); });
                 videoView.setOnErrorListener((mp, what, extra) -> { localReady = false; return false; });
@@ -257,13 +260,15 @@ public class StudyActivity extends Activity {
         int action = event.getActionMasked();
         switch (action) {
             case MotionEvent.ACTION_DOWN:
-                touchDownX = event.getX(); touchDownY = event.getY(); gestureMode = GESTURE_NONE; longPressPending = true;
-                handler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
-                return false;
+                touchDownX = event.getX(); touchDownY = event.getY(); gestureMode = GESTURE_NONE; playerTouchMoved = false;
+                longPressPending = localReady;
+                if (longPressPending) handler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
+                return true;
             case MotionEvent.ACTION_MOVE:
                 float dx = event.getX() - touchDownX;
                 float dy = event.getY() - touchDownY;
-                if (longPressPending && (Math.abs(dx) > touchSlop || Math.abs(dy) > touchSlop)) {
+                if (Math.abs(dx) > touchSlop || Math.abs(dy) > touchSlop) playerTouchMoved = true;
+                if (longPressPending && playerTouchMoved) {
                     longPressPending = false; handler.removeCallbacks(longPressRunnable);
                 }
                 if (gestureMode == GESTURE_NONE && Math.abs(dy) > touchSlop * 2 && Math.abs(dy) > Math.abs(dx) * 1.25f) {
@@ -278,20 +283,24 @@ public class StudyActivity extends Activity {
                     applyVerticalGesture(source, dy);
                     return true;
                 }
-                return false;
+                return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                boolean wasBoostActive = speedBoostActive;
                 longPressPending = false; handler.removeCallbacks(longPressRunnable); releasePlaybackRateBoost();
                 boolean consumed = gestureMode != GESTURE_NONE;
                 gestureMode = GESTURE_NONE;
                 if (consumed) handler.postDelayed(hideGestureIndicator, 900);
-                return consumed;
+                else if (action == MotionEvent.ACTION_UP && !wasBoostActive && !playerTouchMoved && localMediaController != null) localMediaController.show();
+                return true;
             case MotionEvent.ACTION_POINTER_DOWN:
                 longPressPending = false; handler.removeCallbacks(longPressRunnable); releasePlaybackRateBoost();
-                gestureMode = GESTURE_NONE;
-                return false;
+                gestureMode = GESTURE_NONE; playerTouchMoved = true;
+                return true;
+            case MotionEvent.ACTION_POINTER_UP:
+                return true;
             default:
-                return gestureMode != GESTURE_NONE;
+                return true;
         }
     }
 
@@ -338,7 +347,7 @@ public class StudyActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("سرعة الفيديو")
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                     desiredPlaybackRate = rates[which];
-                    applyPlaybackRate(desiredPlaybackRate);
+                    applyPlaybackRate(speedBoostActive ? desiredPlaybackRate * 2f : desiredPlaybackRate);
                     updateSpeedButton();
                     dialog.dismiss();
                 }).setNegativeButton("إلغاء", null).show();
@@ -528,6 +537,7 @@ public class StudyActivity extends Activity {
 
     @Override protected void onPause() {
         super.onPause();
+        longPressPending = false; handler.removeCallbacks(longPressRunnable);
         if (speedBoostActive) releasePlaybackRateBoost();
         if (webView != null) webView.onPause();
         if (card != null) { if (videoView != null) { try { if (videoView.isPlaying()) card.positionSeconds = videoView.getCurrentPosition()/1000L; } catch (Exception ignored) {} } save(); }
