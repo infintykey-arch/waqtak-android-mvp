@@ -71,7 +71,9 @@ public class MainActivity extends Activity {
     private LinearLayout content, grid;
     private FrameLayout mainArea;
     private AdView banner;
+    private AdSize bannerAdSize;
     private InterstitialAd interstitial;
+    private boolean openingStudy = false;
     private final ArrayList<NativeAd> nativeAds = new ArrayList<>();
     private final ArrayList<FrameLayout> nativeAdSlots = new ArrayList<>();
     private final Handler adHandler = new Handler(Looper.getMainLooper());
@@ -140,7 +142,7 @@ public class MainActivity extends Activity {
         fab.setBackground(Ui.shape(Ui.BLUE, Color.rgb(101,174,255), 99, this)); fab.setElevation(Ui.dp(this,8));
         FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(Ui.dp(this,60),Ui.dp(this,60),Gravity.BOTTOM|Gravity.END);
         flp.setMargins(0,0,Ui.dp(this,22),Ui.dp(this,20)); mainArea.addView(fab,flp); fab.setOnClickListener(v -> showForm(null));
-        root.addView(buildBanner(), new LinearLayout.LayoutParams(-1,Ui.dp(this,68)));
+        root.addView(buildBanner(), new LinearLayout.LayoutParams(-1,-2));
         setContentView(root);
     }
 
@@ -163,13 +165,20 @@ public class MainActivity extends Activity {
     private View buildBanner() {
         LinearLayout wrap = new LinearLayout(this); wrap.setOrientation(LinearLayout.VERTICAL); wrap.setGravity(Gravity.CENTER); wrap.setBackgroundColor(Color.rgb(8,12,19));
         TextView label = Ui.text(this,"إعلان",9,Ui.MUTED,false); label.setGravity(Gravity.CENTER); wrap.addView(label,new LinearLayout.LayoutParams(-1,Ui.dp(this,14)));
-        banner = new AdView(this); banner.setAdUnitId(getString(R.string.admob_banner_id)); banner.setAdSize(AdSize.BANNER);
+        banner = new AdView(this); banner.setAdUnitId(getString(R.string.admob_banner_id));
+        bannerAdSize = currentAdaptiveBannerSize(); banner.setAdSize(bannerAdSize);
         banner.setAdListener(new AdListener(){
-            @Override public void onAdLoaded(){bannerRequestInFlight=false;bannerLoaded=true;bannerRetryCount=0;cancelBannerRetry();}
-            @Override public void onAdFailedToLoad(LoadAdError error){bannerRequestInFlight=false;bannerLoaded=false;android.util.Log.w("MidadBannerAd","Banner ad failed: "+error.getCode()+" / "+error.getMessage());scheduleBannerRetry();}
+            @Override public void onAdLoaded(){bannerRequestInFlight=false;bannerLoaded=true;bannerRetryCount=0;cancelBannerRetry();android.util.Log.i("WaqtakAds","Banner loaded; response="+banner.getResponseInfo());}
+            @Override public void onAdFailedToLoad(LoadAdError error){bannerRequestInFlight=false;bannerLoaded=false;android.util.Log.w("WaqtakAds","Banner failed: code="+error.getCode()+", domain="+error.getDomain()+", message="+error.getMessage()+", response="+error.getResponseInfo());scheduleBannerRetry();}
         });
-        wrap.addView(banner,new LinearLayout.LayoutParams(-2,Ui.dp(this,50)));
+        wrap.addView(banner,new LinearLayout.LayoutParams(-1,-2));
         return wrap;
+    }
+
+    private AdSize currentAdaptiveBannerSize() {
+        float density=getResources().getDisplayMetrics().density;
+        int widthDp=Math.max(1,(int)(getResources().getDisplayMetrics().widthPixels/density));
+        return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this,widthDp);
     }
 
     private void loadBanner() {
@@ -399,6 +408,7 @@ public class MainActivity extends Activity {
             if(isFinishing() || isDestroyed() || generation!=renderGeneration || slot.getParent()==null){ad.destroy();return;}
             nativeAdsLoadedSlots.add(slot); nativeAdRetryCounts.remove(slot);
             nativeAds.add(ad); slot.removeAllViews();
+            android.util.Log.i("WaqtakAds","Native ad loaded; response="+ad.getResponseInfo());
             NativeAdView view=new NativeAdView(this); LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(Ui.dp(this,12),Ui.dp(this,26),Ui.dp(this,12),Ui.dp(this,8));
             LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
             TextView adLabel=Ui.text(this,"إعلان",9,Ui.SILVER,true);adLabel.setGravity(Gravity.CENTER);adLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,18,this));top.addView(adLabel,new LinearLayout.LayoutParams(Ui.dp(this,43),Ui.dp(this,22)));
@@ -410,7 +420,7 @@ public class MainActivity extends Activity {
             view.setHeadlineView(headline);view.setBodyView(desc);view.setCallToActionView(cta);view.setNativeAd(ad);slot.addView(view,new FrameLayout.LayoutParams(-1,-1));
         }).withAdListener(new AdListener(){@Override public void onAdFailedToLoad(LoadAdError error){
             nativeAdsLoading.remove(slot);
-            android.util.Log.w("MidadNativeAd","Native ad failed: "+error.getCode()+" / "+error.getMessage());
+            android.util.Log.w("WaqtakAds","Native ad failed: code="+error.getCode()+", domain="+error.getDomain()+", message="+error.getMessage()+", response="+error.getResponseInfo());
             if(isFinishing() || isDestroyed() || generation!=renderGeneration || slot.getParent()==null)return;
             TextView t=Ui.text(MainActivity.this,"الإعلان غير متاح حاليًا؛ ستتم إعادة المحاولة",10,Ui.MUTED,false);t.setGravity(Gravity.CENTER);
             slot.removeAllViews();slot.addView(t,new FrameLayout.LayoutParams(-1,-1));
@@ -433,8 +443,8 @@ public class MainActivity extends Activity {
         if(!adsInitialized || !activityResumed || isFinishing() || isDestroyed() || interstitial!=null || interstitialRequestInFlight || interstitialRetryCallback!=null)return;
         interstitialRequestInFlight=true;
         InterstitialAd.load(this,getString(R.string.admob_interstitial_id),new AdRequest.Builder().build(),new InterstitialAdLoadCallback(){
-            @Override public void onAdLoaded(InterstitialAd ad){interstitialRequestInFlight=false;interstitialRetryCount=0;cancelInterstitialRetry();interstitial=ad;android.util.Log.i("MidadInterstitialAd","Interstitial ad loaded.");}
-            @Override public void onAdFailedToLoad(LoadAdError error){interstitialRequestInFlight=false;interstitial=null;android.util.Log.w("MidadInterstitialAd","Interstitial ad failed: "+error.getCode()+" / "+error.getMessage());scheduleInterstitialRetry();}
+            @Override public void onAdLoaded(InterstitialAd ad){interstitialRequestInFlight=false;interstitialRetryCount=0;cancelInterstitialRetry();interstitial=ad;android.util.Log.i("WaqtakAds","Interstitial loaded; response="+ad.getResponseInfo());}
+            @Override public void onAdFailedToLoad(LoadAdError error){interstitialRequestInFlight=false;interstitial=null;android.util.Log.w("WaqtakAds","Interstitial failed: code="+error.getCode()+", domain="+error.getDomain()+", message="+error.getMessage()+", response="+error.getResponseInfo());scheduleInterstitialRetry();}
         });
     }
 
@@ -449,14 +459,7 @@ public class MainActivity extends Activity {
         if(interstitialRetryCallback!=null){adHandler.removeCallbacks(interstitialRetryCallback);interstitialRetryCallback=null;}
     }
 
-    private void showInterstitialAfterBreak() {
-        if(interstitial==null){loadInterstitial();return;}
-        interstitial.setFullScreenContentCallback(new FullScreenContentCallback(){
-            @Override public void onAdDismissedFullScreenContent(){interstitial=null;loadInterstitial();}
-            @Override public void onAdFailedToShowFullScreenContent(AdError e){android.util.Log.w("MidadInterstitialAd","Interstitial failed to show: "+e.getCode()+" / "+e.getMessage());interstitial=null;loadInterstitial();}
-        });
-        interstitial.show(this); interstitial=null;
-    }
+    private void preloadInterstitial() { loadInterstitial(); }
 
     private StudyCard getNextCard() {
         StudyCard best=cards.get(0);long bestAt=AlarmScheduler.nextAlarmTimeMillis(best);
@@ -479,10 +482,23 @@ public class MainActivity extends Activity {
     @Override protected void onResume(){super.onResume();activityResumed=true;if(banner!=null)banner.resume();boolean exactAlarmGranted=canScheduleExactAlarms();if(exactAlarmGranted!=exactAlarmPermissionGranted){exactAlarmPermissionGranted=exactAlarmGranted;cards=StudyStore.load(this);AlarmScheduler.scheduleAll(this,cards);}if(content!=null)renderPermissions();if(adsInitialized){loadBanner();loadNativeAds();if(interstitial==null)loadInterstitial();}}
     @Override protected void onPause(){activityResumed=false;if(banner!=null)banner.pause();super.onPause();}
 
-    private void openStudy(StudyCard c){Intent i=new Intent(this,StudyActivity.class).putExtra(AlarmScheduler.EXTRA_ID,c.id);startActivityForResult(i,REQ_STUDY);}
+    private void openStudy(StudyCard c){
+        if(c==null||openingStudy||isFinishing()||isDestroyed())return;
+        openingStudy=true;
+        boolean eligible=AdFrequencyGate.recordUserActionAndShouldShow(this);
+        if(!eligible||interstitial==null||!activityResumed){if(interstitial==null)loadInterstitial();launchStudy(c);return;}
+        InterstitialAd ad=interstitial;interstitial=null;
+        ad.setFullScreenContentCallback(new FullScreenContentCallback(){
+            @Override public void onAdShowedFullScreenContent(){AdFrequencyGate.markShown(MainActivity.this);}
+            @Override public void onAdDismissedFullScreenContent(){preloadInterstitial();launchStudy(c);}
+            @Override public void onAdFailedToShowFullScreenContent(AdError error){android.util.Log.w("WaqtakAds","Pre-session interstitial failed to show: code="+error.getCode()+", message="+error.getMessage());preloadInterstitial();launchStudy(c);}
+        });
+        try{ad.show(this);}catch(Exception error){android.util.Log.w("WaqtakAds","Pre-session interstitial exception; continuing without blocking the session.",error);preloadInterstitial();launchStudy(c);}
+    }
+    private void launchStudy(StudyCard c){openingStudy=false;if(isFinishing()||isDestroyed())return;Intent i=new Intent(this,StudyActivity.class).putExtra(AlarmScheduler.EXTRA_ID,c.id);startActivityForResult(i,REQ_STUDY);}
     private void handleStartIntent(Intent i){if(i==null)return;String id=i.getStringExtra("start_card_id");if(id!=null&&!id.isEmpty()){i.removeExtra("start_card_id");StudyCard c=StudyStore.find(this,id);if(c!=null)mainArea.postDelayed(()->openStudy(c),180);}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleStartIntent(intent);}
-    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==REQ_RINGTONE){if(resultCode==RESULT_OK&&data!=null){Uri picked=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);if(picked==null)picked=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);String title="نغمة الإشعار الافتراضية";try{Ringtone ringtone=RingtoneManager.getRingtone(this,picked);if(ringtone!=null)title=ringtone.getTitle(this);}catch(Exception ignored){}AlarmReceiver.saveSelectedSound(this,picked,title);renderSoundSettings();Toast.makeText(this,"تم تغيير نغمة الإشعار",Toast.LENGTH_SHORT).show();}return;}if(requestCode==REQ_VIDEO&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){selectedLocalUri=data.getData();try{getContentResolver().takePersistableUriPermission(selectedLocalUri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}selectedLocalName=displayName(selectedLocalUri);if(fileLabel!=null)fileLabel.setText(selectedLocalName);return;}if(requestCode==REQ_STUDY){refreshAfterStudy();if(resultCode==RESULT_OK&&data!=null&&data.getBooleanExtra("session_completed_today",false))showInterstitialAfterBreak();}}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==REQ_RINGTONE){if(resultCode==RESULT_OK&&data!=null){Uri picked=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);if(picked==null)picked=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);String title="نغمة الإشعار الافتراضية";try{Ringtone ringtone=RingtoneManager.getRingtone(this,picked);if(ringtone!=null)title=ringtone.getTitle(this);}catch(Exception ignored){}AlarmReceiver.saveSelectedSound(this,picked,title);renderSoundSettings();Toast.makeText(this,"تم تغيير نغمة الإشعار",Toast.LENGTH_SHORT).show();}return;}if(requestCode==REQ_VIDEO&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){selectedLocalUri=data.getData();try{getContentResolver().takePersistableUriPermission(selectedLocalUri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}selectedLocalName=displayName(selectedLocalUri);if(fileLabel!=null)fileLabel.setText(selectedLocalName);return;}if(requestCode==REQ_STUDY){refreshAfterStudy();preloadInterstitial();}}
     @Override public void onBackPressed(){new AlertDialog.Builder(this).setMessage("هل تريد الخروج من وقتك؟").setNegativeButton("البقاء",(d,w)->d.dismiss()).setPositiveButton("خروج",(d,w)->finish()).show();}
 
     private void showForm(StudyCard existing) {

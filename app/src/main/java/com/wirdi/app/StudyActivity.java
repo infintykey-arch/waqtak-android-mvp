@@ -28,6 +28,14 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.VideoView;
 
+import com.google.android.gms.ads.AdError;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.FullScreenContentCallback;
+import com.google.android.gms.ads.LoadAdError;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
@@ -43,6 +51,7 @@ public class StudyActivity extends Activity {
     private static final class FitVideoView extends VideoView {
         private int sourceWidth;
         private int sourceHeight;
+        private Runnable userPauseCallback;
 
         FitVideoView(Context context) { super(context); }
 
@@ -50,6 +59,14 @@ public class StudyActivity extends Activity {
             sourceWidth = width;
             sourceHeight = height;
             requestLayout();
+        }
+
+        void setUserPauseCallback(Runnable callback) { userPauseCallback = callback; }
+
+        @Override public void pause() {
+            boolean wasPlaying = isPlaying();
+            super.pause();
+            if (wasPlaying && userPauseCallback != null) userPauseCallback.run();
         }
 
         @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -72,6 +89,13 @@ public class StudyActivity extends Activity {
     }
 
     private final Handler handler = new Handler();
+    private InterstitialAd interstitial;
+    private boolean adsInitialized = false;
+    private boolean activityResumed = false;
+    private boolean interstitialRequestInFlight = false;
+    private boolean interstitialShowing = false;
+    private int interstitialRetryCount = 0;
+    private Runnable interstitialRetryCallback;
     private String cardId = "";
     private StudyCard card;
     private int secondsSinceLastSave = 0;
@@ -169,6 +193,13 @@ public class StudyActivity extends Activity {
         initialRequestedOrientation = getRequestedOrientation();
         buildUi();
         handler.postDelayed(ticker, TICK_MS);
+        if ("local".equals(card.sourceType)) {
+            MobileAds.initialize(this, status -> {
+                if (isFinishing() || isDestroyed()) return;
+                adsInitialized = true;
+                loadPauseInterstitial();
+            });
+        }
     }
 
     private void buildUi() {
@@ -184,6 +215,7 @@ public class StudyActivity extends Activity {
         if ("local".equals(card.sourceType) && card.localUri != null && !card.localUri.isEmpty()) {
             videoView = new FitVideoView(this); mediaFrame.addView(videoView, new FrameLayout.LayoutParams(-1,-1, Gravity.CENTER));
             videoView.setOnTouchListener(this::handlePlayerTouch);
+            videoView.setUserPauseCallback(() -> { if (activityResumed && !isFinishing() && !isDestroyed()) showPauseInterstitialIfEligible(); });
             try {
                 videoView.setVideoURI(Uri.parse(card.localUri));
                 localMediaController = new MediaController(this); localMediaController.setAnchorView(videoView); videoView.setMediaController(localMediaController);
@@ -259,6 +291,69 @@ public class StudyActivity extends Activity {
         stopButton = Ui.text(this, "إنهاء الجلسة", 14, Ui.MUTED, true); stopButton.setGravity(Gravity.CENTER); stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48)); slp.setMargins(Ui.dp(this,22),0,Ui.dp(this,22),Ui.dp(this,18)); root.addView(stopButton, slp); stopButton.setOnClickListener(v -> closeSession());
         setContentView(root); updateTimerUi();
+    }
+
+    private void loadPauseInterstitial() {
+        if (!"local".equals(card.sourceType) || !adsInitialized || !activityResumed || isFinishing() || isDestroyed()
+                || interstitial != null || interstitialRequestInFlight || interstitialRetryCallback != null) return;
+        interstitialRequestInFlight = true;
+        InterstitialAd.load(this, getString(R.string.admob_interstitial_id), new AdRequest.Builder().build(),
+                new InterstitialAdLoadCallback() {
+                    @Override public void onAdLoaded(InterstitialAd ad) {
+                        interstitialRequestInFlight = false;
+                        interstitialRetryCount = 0;
+                        cancelPauseInterstitialRetry();
+                        interstitial = ad;
+                        android.util.Log.i("WaqtakAds", "Local-pause interstitial loaded; response=" + ad.getResponseInfo());
+                    }
+                    @Override public void onAdFailedToLoad(LoadAdError error) {
+                        interstitialRequestInFlight = false;
+                        interstitial = null;
+                        android.util.Log.w("WaqtakAds", "Local-pause interstitial failed: code=" + error.getCode()
+                                + ", domain=" + error.getDomain() + ", message=" + error.getMessage()
+                                + ", response=" + error.getResponseInfo());
+                        schedulePauseInterstitialRetry();
+                    }
+                });
+    }
+
+    private void schedulePauseInterstitialRetry() {
+        if (!activityResumed || isFinishing() || isDestroyed() || interstitialRetryCount >= 3 || interstitialRetryCallback != null) return;
+        int retry = ++interstitialRetryCount;
+        interstitialRetryCallback = () -> { interstitialRetryCallback = null; loadPauseInterstitial(); };
+        handler.postDelayed(interstitialRetryCallback, 15_000L * (1L << (retry - 1)));
+    }
+
+    private void cancelPauseInterstitialRetry() {
+        if (interstitialRetryCallback != null) {
+            handler.removeCallbacks(interstitialRetryCallback);
+            interstitialRetryCallback = null;
+        }
+    }
+
+    private void showPauseInterstitialIfEligible() {
+        if (!activityResumed || interstitialShowing || isFinishing() || isDestroyed()) return;
+        boolean eligible = AdFrequencyGate.recordUserActionAndShouldShow(this);
+        if (!eligible) return;
+        if (interstitial == null) { loadPauseInterstitial(); return; }
+        InterstitialAd ad = interstitial;
+        interstitial = null;
+        interstitialShowing = true;
+        ad.setFullScreenContentCallback(new FullScreenContentCallback() {
+            @Override public void onAdShowedFullScreenContent() { AdFrequencyGate.markShown(StudyActivity.this); }
+            @Override public void onAdDismissedFullScreenContent() { interstitialShowing = false; loadPauseInterstitial(); }
+            @Override public void onAdFailedToShowFullScreenContent(AdError error) {
+                android.util.Log.w("WaqtakAds", "Local-pause interstitial failed to show: code=" + error.getCode() + ", message=" + error.getMessage());
+                interstitialShowing = false;
+                loadPauseInterstitial();
+            }
+        });
+        try { ad.show(this); }
+        catch (Exception error) {
+            android.util.Log.w("WaqtakAds", "Local-pause interstitial exception; video remains paused.", error);
+            interstitialShowing = false;
+            loadPauseInterstitial();
+        }
     }
 
     private void addPlayerControls() {
@@ -563,22 +658,23 @@ public class StudyActivity extends Activity {
     }
     private void closeSession() {
         if (card == null) { finish(); return; }
-        if (videoView != null) { try { if (videoView.isPlaying()) card.positionSeconds = videoView.getCurrentPosition()/1000L; videoView.pause(); } catch (Exception ignored) {} }
+        if (videoView != null) { try { if (videoView.isPlaying()) card.positionSeconds = videoView.getCurrentPosition()/1000L; videoView.setUserPauseCallback(null); videoView.pause(); } catch (Exception ignored) {} }
         save();
         Intent result = new Intent().putExtra("session_completed_today", completedThisSession || card.doneToday());
         setResult(RESULT_OK, result); finish();
     }
 
     @Override protected void onPause() {
+        activityResumed = false;
         super.onPause();
         longPressPending = false; handler.removeCallbacks(longPressRunnable);
         if (speedBoostActive) releasePlaybackRateBoost();
         if (webView != null) webView.onPause();
         if (card != null) { if (videoView != null) { try { if (videoView.isPlaying()) card.positionSeconds = videoView.getCurrentPosition()/1000L; } catch (Exception ignored) {} } save(); }
     }
-    @Override protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); }
+    @Override protected void onResume() { super.onResume(); activityResumed = true; if (webView != null) webView.onResume(); if (adsInitialized) loadPauseInterstitial(); }
     @Override protected void onDestroy() {
-        handler.removeCallbacks(ticker); handler.removeCallbacks(longPressRunnable); handler.removeCallbacks(hideGestureIndicator);
+        handler.removeCallbacks(ticker); handler.removeCallbacks(longPressRunnable); handler.removeCallbacks(hideGestureIndicator); cancelPauseInterstitialRetry();
         if (youtubeNativeFullscreen) exitYoutubeNativeFullscreen();
         if (isVideoFullscreen) {
             getWindow().getDecorView().setSystemUiVisibility(originalSystemUiVisibility);
