@@ -24,6 +24,11 @@ public class AlarmSoundService extends Service {
 
     private MediaPlayer player;
 
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(AppLocale.wrap(base));
+    }
+
     public static void start(Context context, String cardId, String cardName) {
         Intent intent = new Intent(context, AlarmSoundService.class)
                 .putExtra(EXTRA_CARD_ID, cardId)

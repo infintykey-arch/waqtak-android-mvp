@@ -58,6 +58,7 @@ public class AlarmReceiver extends BroadcastReceiver {
     }
 
     public static void ensureChannel(Context context) {
+        context = AppLocale.wrap(context);
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
@@ -76,6 +77,7 @@ public class AlarmReceiver extends BroadcastReceiver {
     }
 
     @Override public void onReceive(Context context, Intent intent) {
+        context = AppLocale.wrap(context);
         String id = intent.getStringExtra(AlarmScheduler.EXTRA_ID);
         String name = intent.getStringExtra(AlarmScheduler.EXTRA_NAME);
         boolean snooze = intent.getBooleanExtra(AlarmScheduler.EXTRA_SNOOZE, false);

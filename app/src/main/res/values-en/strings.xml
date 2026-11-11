@@ -2,6 +2,11 @@
     <string name="app_name">Waqtak</string>
     <string name="brand_name">Waqtak</string>
     <string name="home_tagline">Organize your study time</string>
+    <string name="language_title">App language</string>
+    <string name="language_description">Tap to switch between Arabic and English.</string>
+    <string name="language_switch_to_english">Switch to English</string>
+    <string name="language_switch_to_arabic">Switch to Arabic</string>
+    <string name="language_switch_accessibility">Switch to the other language</string>
     <string name="ad_label">Ad</string>
     <string name="ringtone_title">Notification sound</string>
     <string name="ringtone_description">Choose the sound that plays when a reminder is due.</string>

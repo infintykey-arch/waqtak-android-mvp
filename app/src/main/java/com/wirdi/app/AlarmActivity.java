@@ -11,7 +11,7 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-public class AlarmActivity extends Activity {
+public class AlarmActivity extends LocalizedActivity {
     private String cardId = "";
     private String cardName = "";
 

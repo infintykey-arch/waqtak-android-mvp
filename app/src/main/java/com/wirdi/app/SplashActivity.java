@@ -8,7 +8,7 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 
-public class SplashActivity extends Activity {
+public class SplashActivity extends LocalizedActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(Ui.BG); getWindow().setNavigationBarColor(Ui.BG);

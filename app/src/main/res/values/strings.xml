@@ -2,6 +2,11 @@
     <string name="app_name">وقتك</string>
     <string name="brand_name">وقتك</string>
     <string name="home_tagline">نظّم وقت المذاكرة</string>
+    <string name="language_title">لغة التطبيق</string>
+    <string name="language_description">اضغط للتبديل بين العربية والإنجليزية.</string>
+    <string name="language_switch_to_english">التبديل إلى English</string>
+    <string name="language_switch_to_arabic">التبديل إلى العربية</string>
+    <string name="language_switch_accessibility">التبديل إلى اللغة الأخرى</string>
     <string name="ad_label">إعلان</string>
     <string name="ringtone_title">نغمة الإشعار</string>
     <string name="ringtone_description">اختر الصوت الذي يصدر عند موعد التنبيه.</string>

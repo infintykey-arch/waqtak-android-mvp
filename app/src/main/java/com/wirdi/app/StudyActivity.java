@@ -41,7 +41,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.text.SimpleDateFormat;
 
-public class StudyActivity extends Activity {
+public class StudyActivity extends LocalizedActivity {
     private static final int TICK_MS = 1000;
     private static final int SAVE_INTERVAL_SECONDS = 10;
     private static final int GESTURE_NONE = 0;

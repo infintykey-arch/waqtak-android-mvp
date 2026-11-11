@@ -60,7 +60,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.UUID;
 
-public class MainActivity extends Activity {
+public class MainActivity extends LocalizedActivity {
     private static final int REQ_STUDY = 505;
     private static final int REQ_VIDEO = 404;
     private static final int REQ_NOTIFICATIONS = 606;
@@ -209,7 +209,34 @@ public class MainActivity extends Activity {
     }
 
     private void renderLoadedCards() {
-        renderHero(); renderPermissions(); renderSoundSettings(); renderCards();
+        renderHero(); renderPermissions(); renderLanguageSettings(); renderSoundSettings(); renderCards();
+    }
+
+    private void renderLanguageSettings() {
+        View old = content.findViewWithTag("language-settings");
+        if (old != null) content.removeView(old);
+        LinearLayout box = new LinearLayout(this);
+        box.setTag("language-settings");
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this,14),Ui.dp(this,11),Ui.dp(this,14),Ui.dp(this,12));
+        box.setBackground(Ui.gradient(Color.rgb(18,29,43),Color.rgb(12,19,29),Ui.LINE,16,this));
+        TextView title = Ui.text(this,getString(R.string.language_title),14,Ui.WHITE,true);
+        box.addView(title);
+        TextView description = Ui.text(this,getString(R.string.language_description),11,Ui.MUTED,false);
+        LinearLayout.LayoutParams descriptionLp = new LinearLayout.LayoutParams(-1,Ui.dp(this,25));
+        descriptionLp.topMargin = Ui.dp(this,2);
+        box.addView(description,descriptionLp);
+        boolean currentLanguageIsArabic = "ar".equals(AppLocale.getLocale(this).getLanguage());
+        Button change = Ui.button(this,getString(currentLanguageIsArabic
+                ? R.string.language_switch_to_english : R.string.language_switch_to_arabic),Ui.BLUE,Color.WHITE);
+        change.setContentDescription(getString(R.string.language_switch_accessibility));
+        change.setOnClickListener(v -> AppLocale.setLanguage(this,currentLanguageIsArabic ? "en" : "ar"));
+        LinearLayout.LayoutParams changeLp = new LinearLayout.LayoutParams(-1,Ui.dp(this,42));
+        changeLp.topMargin = Ui.dp(this,5);
+        box.addView(change,changeLp);
+        LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(-1,-2);
+        boxLp.bottomMargin = Ui.dp(this,15);
+        content.addView(box,boxLp);
     }
 
     private void renderSoundSettings() {
