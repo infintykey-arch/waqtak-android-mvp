@@ -10,6 +10,7 @@ import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 public class AlarmActivity extends LocalizedActivity {
     private String cardId = "";
@@ -50,9 +51,15 @@ public class AlarmActivity extends LocalizedActivity {
         startActivity(i); finish();
     }
     private void snooze() {
-        AlarmSoundService.stop(this);
         StudyCard c = StudyStore.find(this, cardId);
-        if (c != null) AlarmScheduler.scheduleSnooze(this, c);
+        if (c != null) {
+            DailySnoozeLimit.Result result = DailySnoozeLimit.postpone(this, c);
+            if (result == DailySnoozeLimit.Result.DAILY_LIMIT_REACHED) {
+                Toast.makeText(this, getString(R.string.daily_snooze_limit_reached), Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        AlarmSoundService.stop(this);
         cancelNotification(); finish();
     }
     private void cancelNotification() {

@@ -115,6 +115,7 @@
     <string name="alarm_screen_title">It is time to study</string>
     <string name="start_now">Start now</string>
     <string name="snooze_five_minutes">Snooze 5 minutes</string>
+    <string name="daily_snooze_limit_reached">You have used all 3 snoozes for today. Start the study session instead.</string>
     <string name="alarm_channel_name">Waqtak reminders</string>
     <string name="default_ringtone">Default notification sound</string>
     <string name="alarm_channel_description">Daily reminders for study sessions</string>

@@ -115,6 +115,7 @@
     <string name="alarm_screen_title">حان وقت جلسة المذاكرة</string>
     <string name="start_now">ابدأ الآن</string>
     <string name="snooze_five_minutes">تأجيل ٥ دقائق</string>
+    <string name="daily_snooze_limit_reached">استنفدت مرات التأجيل الثلاث لهذا اليوم. ابدأ الجلسة بدلًا من ذلك.</string>
     <string name="alarm_channel_name">تنبيهات وقتك</string>
     <string name="default_ringtone">نغمة الإشعار الافتراضية</string>
     <string name="alarm_channel_description">منبه يومي لمواعيد المذاكرة</string>

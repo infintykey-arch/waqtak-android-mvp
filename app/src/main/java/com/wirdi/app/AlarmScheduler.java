@@ -80,17 +80,35 @@ public final class AlarmScheduler {
         return Long.MAX_VALUE;
     }
 
-    public static void scheduleSnooze(Context context, StudyCard card) {
-        if (card == null) return;
+    public static boolean scheduleSnooze(Context context, StudyCard card) {
+        if (card == null) return false;
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (manager == null) return;
+        if (manager == null) return false;
         PendingIntent pending = alarmPendingIntent(context, card.id, card.name, true);
         long at = System.currentTimeMillis() + 5 * 60 * 1000L;
         try {
             if (Build.VERSION.SDK_INT >= 31 && manager.canScheduleExactAlarms()) {
                 manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
-            } else manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
-        } catch (SecurityException ignored) { manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending); }
+            } else {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+            }
+            return true;
+        } catch (SecurityException ignored) {
+            try {
+                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pending);
+                return true;
+            } catch (RuntimeException fallbackError) {
+                return false;
+            }
+        } catch (RuntimeException error) {
+            return false;
+        }
+    }
+
+    public static void cancelSnooze(Context context, StudyCard card) {
+        if (card == null) return;
+        AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (manager != null) manager.cancel(alarmPendingIntent(context, card.id, card.name, true));
     }
 
     public static void cancel(Context context, String id) {
