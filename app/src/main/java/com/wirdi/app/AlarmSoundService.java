@@ -66,8 +66,8 @@ public class AlarmSoundService extends Service {
                 : new Notification.Builder(this).setPriority(Notification.PRIORITY_LOW);
         Notification notification = builder
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("منبّه وقتك يعمل")
-                .setContentText("اضغط لفتح التنبيه وإيقاف الصوت")
+                .setContentTitle(getString(R.string.service_notification_title))
+                .setContentText(getString(R.string.service_notification_text))
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setOngoing(true)
@@ -83,11 +83,15 @@ public class AlarmSoundService extends Service {
     private void createForegroundChannel() {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
-        if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "تشغيل صوت المنبه", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("إشعار مستمر أثناء تشغيل صوت المنبه");
-        channel.setSound(null, null);
-        channel.enableVibration(false);
+        if (manager == null) return;
+        NotificationChannel channel = manager.getNotificationChannel(CHANNEL_ID);
+        if (channel == null) {
+            channel = new NotificationChannel(CHANNEL_ID, getString(R.string.playback_channel_name), NotificationManager.IMPORTANCE_LOW);
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+        }
+        channel.setName(getString(R.string.playback_channel_name));
+        channel.setDescription(getString(R.string.playback_channel_description));
         manager.createNotificationChannel(channel);
     }
 

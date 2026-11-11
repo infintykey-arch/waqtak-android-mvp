@@ -31,7 +31,6 @@ public class StudyCard {
     public int streak = 0;
 
     public static final String[] COLORS = {"#438BFF", "#77B9FF", "#AAB8C8", "#47C4C0", "#8E8EFF"};
-    public static final String[] COLOR_NAMES = {"أزرق", "سماوي", "فضي", "فيروزي", "بنفسجي"};
 
     public static String today() {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());

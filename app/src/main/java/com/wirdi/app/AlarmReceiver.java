@@ -16,10 +16,10 @@ import java.util.ArrayList;
 
 public class AlarmReceiver extends BroadcastReceiver {
     private static final String CHANNEL_ID_PREFIX = "waqtak_daily_alarm_";
-    private static final String CHANNEL_NAME = "تنبيهات وقتك";
     private static final String PREFS = "notification_sound_preferences";
     private static final String PREF_SOUND_URI = "sound_uri";
     private static final String PREF_SOUND_NAME = "sound_name";
+    private static final String LEGACY_DEFAULT_SOUND_NAME = "\u0646\u063a\u0645\u0629 \u0627\u0644\u0625\u0634\u0639\u0627\u0631 \u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a\u0629";
 
     public static int notificationId(String id) { return 47000 + Math.abs(id.hashCode() % 20000); }
 
@@ -32,12 +32,16 @@ public class AlarmReceiver extends BroadcastReceiver {
     }
 
     public static String selectedSoundName(Context context) {
-        return preferences(context).getString(PREF_SOUND_NAME, "نغمة الإشعار الافتراضية");
+        String saved = preferences(context).getString(PREF_SOUND_NAME, null);
+        if (saved == null || saved.trim().isEmpty() || context.getString(R.string.default_ringtone).equals(saved) || LEGACY_DEFAULT_SOUND_NAME.equals(saved)) {
+            return context.getString(R.string.default_ringtone);
+        }
+        return saved;
     }
 
     public static void saveSelectedSound(Context context, Uri uri, String name) {
         if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-        if (name == null || name.trim().isEmpty()) name = "نغمة الإشعار الافتراضية";
+        if (name == null || name.trim().isEmpty()) name = context.getString(R.string.default_ringtone);
         preferences(context).edit()
                 .putString(PREF_SOUND_URI, uri.toString())
                 .putString(PREF_SOUND_NAME, name)
@@ -58,14 +62,16 @@ public class AlarmReceiver extends BroadcastReceiver {
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm == null) return;
         String id = channelId(context);
-        if (nm.getNotificationChannel(id) != null) return;
-
-        NotificationChannel ch = new NotificationChannel(id, CHANNEL_NAME + " · " + selectedSoundName(context), NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("منبه يومي لمواعيد المذاكرة");
-        ch.enableVibration(true);
-        ch.setVibrationPattern(new long[]{0, 500, 250, 500, 250, 900});
-        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        ch.setSound(null, null);
+        NotificationChannel ch = nm.getNotificationChannel(id);
+        if (ch == null) {
+            ch = new NotificationChannel(id, context.getString(R.string.alarm_channel_name) + " · " + selectedSoundName(context), NotificationManager.IMPORTANCE_HIGH);
+            ch.enableVibration(true);
+            ch.setVibrationPattern(new long[]{0, 500, 250, 500, 250, 900});
+            ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            ch.setSound(null, null);
+        }
+        ch.setName(context.getString(R.string.alarm_channel_name) + " · " + selectedSoundName(context));
+        ch.setDescription(context.getString(R.string.alarm_channel_description));
         nm.createNotificationChannel(ch);
     }
 
@@ -99,9 +105,9 @@ public class AlarmReceiver extends BroadcastReceiver {
                 ? new Notification.Builder(context, channelId(context))
                 : new Notification.Builder(context).setPriority(Notification.PRIORITY_MAX).setSound(null);
         Notification notification = b.setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-                .setContentTitle("حان وقت جلسة المذاكرة")
+                .setContentTitle(context.getString(R.string.alarm_screen_title))
                 .setContentText(name)
-                .setStyle(new Notification.BigTextStyle().bigText(name + " — ابدأ جلسة المذاكرة أو أجّل التنبيه خمس دقائق."))
+                .setStyle(new Notification.BigTextStyle().bigText(context.getString(R.string.alarm_name_for_notification, name)))
                 .setCategory(Notification.CATEGORY_ALARM)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)
                 .setAutoCancel(false).setOngoing(true)

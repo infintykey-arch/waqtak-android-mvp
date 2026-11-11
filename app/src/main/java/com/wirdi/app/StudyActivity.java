@@ -204,10 +204,11 @@ public class StudyActivity extends Activity {
 
     private void buildUi() {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Ui.BG);
+        AppLocale.applyLayoutDirection(this, root);
         header = new LinearLayout(this); header.setGravity(Gravity.CENTER_VERTICAL); header.setPadding(Ui.dp(this,16), Ui.dp(this,8), Ui.dp(this,16), Ui.dp(this,8));
         TextView back = Ui.text(this, "‹", 32, Ui.SILVER, true); back.setGravity(Gravity.CENTER); header.addView(back, new LinearLayout.LayoutParams(Ui.dp(this,44), Ui.dp(this,48))); back.setOnClickListener(v -> closeSession());
         TextView name = Ui.text(this, card.name, 17, Ui.WHITE, true); name.setMaxLines(1); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0, Ui.dp(this,48), 1); nlp.leftMargin = Ui.dp(this,8); header.addView(name, nlp); root.addView(header);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0, Ui.dp(this,48), 1); nlp.setMarginStart(Ui.dp(this,8)); header.addView(name, nlp); root.addView(header);
 
         mediaFrame = new FrameLayout(this); mediaFrame.setBackgroundColor(Color.BLACK);
         videoHeight = Math.min(Ui.dp(this,260), Math.max(Ui.dp(this,165), getResources().getDisplayMetrics().widthPixels * 9 / 16));
@@ -229,7 +230,7 @@ public class StudyActivity extends Activity {
                 });
                 videoView.setOnCompletionListener(mp -> { paused = true; updateToggle(); });
                 videoView.setOnErrorListener((mp, what, extra) -> { localReady = false; return false; });
-            } catch (Exception e) { showMediaError(mediaFrame, "تعذر فتح ملف الفيديو. عدّل الكورس واختر الملف من جديد."); }
+            } catch (Exception e) { showMediaError(mediaFrame, getString(R.string.video_open_error)); }
         } else if (YoutubeLink.isVideoId(card.youtubeId) || YoutubeLink.isPlaylistId(card.youtubePlaylistId)) {
             webView = new WebView(this); webView.setBackgroundColor(Color.BLACK);
             WebSettings settings = webView.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setMediaPlaybackRequiresUserGesture(false);
@@ -267,13 +268,13 @@ public class StudyActivity extends Activity {
                     "<body style='margin:0;background:#000;height:100%'><iframe id='ytframe' style='width:100%;height:100%;border:0' src='" + embedUrl.replace("&", "&amp;") + "' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe>" +
                     "</body></html>";
             webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
-        } else showMediaError(mediaFrame, "لا يوجد مصدر فيديو صالح لهذا الكورس.");
+        } else showMediaError(mediaFrame, getString(R.string.video_source_invalid));
 
         if (videoView != null) addPlayerControls();
 
         body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setGravity(Gravity.CENTER_HORIZONTAL);
         body.setPadding(Ui.dp(this,22), Ui.dp(this,20), Ui.dp(this,22), Ui.dp(this,18));
-        TextView remaining = Ui.text(this, "الوقت المتبقي من جلسة اليوم", 14, Ui.MUTED, false); remaining.setGravity(Gravity.CENTER);
+        TextView remaining = Ui.text(this, getString(R.string.session_time_remaining), 14, Ui.MUTED, false); remaining.setGravity(Gravity.CENTER);
         body.addView(remaining, new LinearLayout.LayoutParams(-1, Ui.dp(this,32)));
         timeLabel = Ui.text(this, "00:00", 42, Ui.WHITE, true); timeLabel.setGravity(Gravity.CENTER);
         body.addView(timeLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,68)));
@@ -281,14 +282,14 @@ public class StudyActivity extends Activity {
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-1, Ui.dp(this,7)); plp.topMargin = Ui.dp(this,8); plp.bottomMargin = Ui.dp(this,8); body.addView(progressBar, plp);
         progressLabel = Ui.text(this, "", 12, Ui.MUTED, false); progressLabel.setGravity(Gravity.CENTER);
         body.addView(progressLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,28)));
-        TextView toggle = Ui.text(this, "Ⅱ   إيقاف احتساب الوقت مؤقتًا", 14, Ui.SILVER, true); toggle.setGravity(Gravity.CENTER);
+        TextView toggle = Ui.text(this, getString(R.string.pause_time_tracking), 14, Ui.SILVER, true); toggle.setGravity(Gravity.CENTER);
         toggle.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 24, this));
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-1, Ui.dp(this,50)); tlp.topMargin = Ui.dp(this,12); body.addView(toggle, tlp);
         toggleLabel = toggle; toggle.setOnClickListener(v -> toggleTracking());
-        TextView note = Ui.text(this, "يمكن إيقاف المؤقّت دون إنهاء الفيديو. يُحفظ تقدّمك تلقائيًا.", 12, Ui.MUTED, false); note.setGravity(Gravity.CENTER); note.setMaxLines(2);
+        TextView note = Ui.text(this, getString(R.string.auto_save_note), 12, Ui.MUTED, false); note.setGravity(Gravity.CENTER); note.setMaxLines(2);
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,44)); noteLp.topMargin = Ui.dp(this,7); body.addView(note, noteLp);
         root.addView(body, new LinearLayout.LayoutParams(-1,0,1));
-        stopButton = Ui.text(this, "إنهاء الجلسة", 14, Ui.MUTED, true); stopButton.setGravity(Gravity.CENTER); stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
+        stopButton = Ui.text(this, getString(R.string.end_session), 14, Ui.MUTED, true); stopButton.setGravity(Gravity.CENTER); stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48)); slp.setMargins(Ui.dp(this,22),0,Ui.dp(this,22),Ui.dp(this,18)); root.addView(stopButton, slp); stopButton.setOnClickListener(v -> closeSession());
         setContentView(root); updateTimerUi();
     }
@@ -359,18 +360,18 @@ public class StudyActivity extends Activity {
     private void addPlayerControls() {
         playerControls = new LinearLayout(this); playerControls.setOrientation(LinearLayout.HORIZONTAL); playerControls.setGravity(Gravity.CENTER_VERTICAL);
         playerControls.setPadding(Ui.dp(this,8), Ui.dp(this,5), Ui.dp(this,8), Ui.dp(this,5)); playerControls.setBackgroundColor(Ui.SURFACE);
-        videoTimeLabel = Ui.text(this, "المتبقي −—:—", 12, Ui.SILVER, true);
+        videoTimeLabel = Ui.text(this, getString(R.string.video_remaining_default), 12, Ui.SILVER, true);
         videoTimeLabel.setGravity(Gravity.CENTER); videoTimeLabel.setPadding(Ui.dp(this,7), 0, Ui.dp(this,7), 0); videoTimeLabel.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 12, this));
-        videoTimeLabel.setContentDescription("اضغط للتبديل بين الوقت المتبقي والوقت المشاهَد من الفيديو");
+        videoTimeLabel.setContentDescription(getString(R.string.toggle_video_time_description));
         videoTimeLabel.setOnClickListener(v -> { showVideoRemaining = !showVideoRemaining; updateVideoTimeLabel(); });
-        LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(0, Ui.dp(this,42), 1); timeLp.rightMargin = Ui.dp(this,5); playerControls.addView(videoTimeLabel, timeLp);
-        speedButton = Ui.text(this, "×1 السرعة", 12, Ui.WHITE, true);
+        LinearLayout.LayoutParams timeLp = new LinearLayout.LayoutParams(0, Ui.dp(this,42), 1); timeLp.setMarginEnd(Ui.dp(this,5)); playerControls.addView(videoTimeLabel, timeLp);
+        speedButton = Ui.text(this, getString(R.string.default_speed_button), 12, Ui.WHITE, true);
         speedButton.setGravity(Gravity.CENTER); speedButton.setPadding(Ui.dp(this,8), 0, Ui.dp(this,8), 0); speedButton.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 12, this));
-        speedButton.setContentDescription("اختيار سرعة تشغيل الفيديو"); speedButton.setOnClickListener(v -> showPlaybackRateDialog());
-        LinearLayout.LayoutParams speedLp = new LinearLayout.LayoutParams(-2, Ui.dp(this,42)); speedLp.rightMargin = Ui.dp(this,5); playerControls.addView(speedButton, speedLp);
+        speedButton.setContentDescription(getString(R.string.playback_speed_description)); speedButton.setOnClickListener(v -> showPlaybackRateDialog());
+        LinearLayout.LayoutParams speedLp = new LinearLayout.LayoutParams(-2, Ui.dp(this,42)); speedLp.setMarginEnd(Ui.dp(this,5)); playerControls.addView(speedButton, speedLp);
         fullscreenButton = Ui.text(this, "⛶", 20, Ui.WHITE, true);
         fullscreenButton.setGravity(Gravity.CENTER); fullscreenButton.setPadding(Ui.dp(this,10), 0, Ui.dp(this,10), 0); fullscreenButton.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 12, this));
-        fullscreenButton.setContentDescription("ملء الشاشة"); fullscreenButton.setOnClickListener(v -> setVideoFullscreen(!isVideoFullscreen, true));
+        fullscreenButton.setContentDescription(getString(R.string.fullscreen)); fullscreenButton.setOnClickListener(v -> setVideoFullscreen(!isVideoFullscreen, true));
         playerControls.addView(fullscreenButton, new LinearLayout.LayoutParams(-2, Ui.dp(this,42)));
         root.addView(playerControls, new LinearLayout.LayoutParams(-1, Ui.dp(this,52)));
 
@@ -439,13 +440,13 @@ public class StudyActivity extends Activity {
             int value = Math.max(0, Math.min(max, gestureStartVolume + Math.round(change * max)));
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, value, 0);
             int percent = Math.round(value * 100f / max);
-            showGestureIndicator("الصوت  " + percent + "%");
+            showGestureIndicator(getString(R.string.volume_percent, percent));
         } else if (gestureMode == GESTURE_BRIGHTNESS) {
             float value = Math.max(0.05f, Math.min(1f, gestureStartBrightness + change));
             android.view.WindowManager.LayoutParams attributes = getWindow().getAttributes();
             attributes.screenBrightness = value;
             getWindow().setAttributes(attributes);
-            showGestureIndicator("الإضاءة  " + Math.round(value * 100f) + "%");
+            showGestureIndicator(getString(R.string.brightness_percent, Math.round(value * 100f)));
         }
     }
 
@@ -471,13 +472,13 @@ public class StudyActivity extends Activity {
             labels[i] = "×" + formatRate(rates[i]);
             if (Math.abs(rates[i] - desiredPlaybackRate) < 0.01f) checked = i;
         }
-        new AlertDialog.Builder(this).setTitle("سرعة الفيديو")
+        new AlertDialog.Builder(this).setTitle(getString(R.string.video_speed_title))
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                     desiredPlaybackRate = rates[which];
                     applyPlaybackRate(speedBoostActive ? desiredPlaybackRate * 2f : desiredPlaybackRate);
                     updateSpeedButton();
                     dialog.dismiss();
-                }).setNegativeButton("إلغاء", null).show();
+                }).setNegativeButton(getString(R.string.cancel), null).show();
     }
 
     private float[] playbackRateChoices() {
@@ -490,7 +491,7 @@ public class StudyActivity extends Activity {
     }
 
     private void updateSpeedButton() {
-        if (speedButton != null) speedButton.setText("×" + formatRate(desiredPlaybackRate) + " السرعة");
+        if (speedButton != null) speedButton.setText("×" + formatRate(desiredPlaybackRate) + getString(R.string.speed_button_suffix));
     }
 
     private void applyPlaybackRate(float rate) {
@@ -533,7 +534,7 @@ public class StudyActivity extends Activity {
             mediaFrame.requestLayout(); videoView.requestLayout();
             decor.setSystemUiVisibility(fullscreenSystemUiFlags());
             if (lockLandscape) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-            fullscreenButton.setText("⛶"); fullscreenButton.setContentDescription("إنهاء ملء الشاشة");
+            fullscreenButton.setText("⛶"); fullscreenButton.setContentDescription(getString(R.string.exit_fullscreen));
         } else {
             header.setVisibility(View.VISIBLE); body.setVisibility(View.VISIBLE); stopButton.setVisibility(View.VISIBLE);
             if (playerControls.getParent() == mediaFrame) mediaFrame.removeView(playerControls);
@@ -545,7 +546,7 @@ public class StudyActivity extends Activity {
             decor.setSystemUiVisibility(originalSystemUiVisibility);
             if (forceLandscapeForFullscreen) setRequestedOrientation(initialRequestedOrientation);
             forceLandscapeForFullscreen = false;
-            fullscreenButton.setText("⛶"); fullscreenButton.setContentDescription("ملء الشاشة");
+            fullscreenButton.setText("⛶"); fullscreenButton.setContentDescription(getString(R.string.fullscreen));
         }
     }
 
@@ -594,13 +595,13 @@ public class StudyActivity extends Activity {
     private void updateVideoTimeLabel() {
         if (videoTimeLabel == null) return;
         if (videoDurationSeconds <= 0) {
-            videoTimeLabel.setText(showVideoRemaining ? "المتبقي −—:—" : "المشاهَد  00:00");
+            videoTimeLabel.setText(showVideoRemaining ? getString(R.string.video_remaining_default) : getString(R.string.video_watched_default));
             return;
         }
         if (showVideoRemaining) {
             long remaining = Math.max(0, Math.round(videoDurationSeconds - videoCurrentSeconds));
-            videoTimeLabel.setText("المتبقي  −" + formatVideoTime(remaining));
-        } else videoTimeLabel.setText("المشاهَد  " + formatVideoTime(Math.round(videoCurrentSeconds)));
+            videoTimeLabel.setText(getString(R.string.video_remaining_prefix) + formatVideoTime(remaining));
+        } else videoTimeLabel.setText(getString(R.string.video_watched_prefix) + formatVideoTime(Math.round(videoCurrentSeconds)));
     }
 
     private String formatVideoTime(long seconds) {
@@ -622,7 +623,7 @@ public class StudyActivity extends Activity {
     private void updateToggle() {
         if (toggleLabel != null) {
             boolean actuallyPaused = paused || ("local".equals(card.sourceType) && localReady && videoView != null && !videoView.isPlaying());
-            toggleLabel.setText(actuallyPaused ? "▶   استئناف احتساب الوقت" : "Ⅱ   إيقاف احتساب الوقت مؤقتًا");
+            toggleLabel.setText(actuallyPaused ? getString(R.string.resume_time_tracking) : getString(R.string.pause_time_tracking));
             toggleLabel.setTextColor(actuallyPaused ? Ui.BLUE : Ui.SILVER);
         }
     }
@@ -632,7 +633,7 @@ public class StudyActivity extends Activity {
         long remaining = Math.max(0, goal - card.elapsedToday);
         timeLabel.setText(String.format(Locale.US, "%02d:%02d", remaining / 60, remaining % 60));
         progressBar.setProgress((int)Math.min(100, card.elapsedToday * 100 / Math.max(1, goal)));
-        progressLabel.setText(String.format(Locale.US, "%d من %d دقيقة", Math.min(card.elapsedToday / 60, card.dailyMinutes), card.dailyMinutes));
+        progressLabel.setText(String.format(Locale.US, getString(R.string.session_progress_minutes), Math.min(card.elapsedToday / 60, card.dailyMinutes), card.dailyMinutes));
         updateToggle();
     }
 
@@ -644,11 +645,11 @@ public class StudyActivity extends Activity {
         c.completedDate = today;
     }
     private void showCompletedDialog() {
-        new AlertDialog.Builder(this).setTitle("انتهى الوقت المحدد")
-                .setMessage("أحسنت! أكملت " + card.dailyMinutes + " دقيقة من «" + card.name + "». يمكنك مواصلة المذاكرة أو إنهاء الجلسة.")
+        new AlertDialog.Builder(this).setTitle(getString(R.string.session_complete_title))
+                .setMessage(getString(R.string.study_completed_message, card.dailyMinutes, card.name))
                 .setCancelable(false)
-                .setNegativeButton("إكمال", (d,w) -> { d.dismiss(); })
-                .setPositiveButton("إنهاء الجلسة", (d,w) -> { d.dismiss(); closeSession(); })
+                .setNegativeButton(getString(R.string.continue_studying), (d,w) -> { d.dismiss(); })
+                .setPositiveButton(getString(R.string.end_session), (d,w) -> { d.dismiss(); closeSession(); })
                 .show();
     }
     private void save() {
