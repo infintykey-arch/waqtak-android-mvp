@@ -268,6 +268,12 @@ public class StudyActivity extends LocalizedActivity {
                     "<body style='margin:0;background:#000;height:100%'><iframe id='ytframe' style='width:100%;height:100%;border:0' src='" + embedUrl.replace("&", "&amp;") + "' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe>" +
                     "</body></html>";
             webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
+        } else if (CourseLink.isValidHttpUrl(card.resourceUrl)) {
+            TextView openLink = Ui.text(this, getString(R.string.open_course_link), 16, Ui.WHITE, true);
+            openLink.setGravity(Gravity.CENTER);
+            openLink.setBackground(Ui.shape(Ui.SURFACE2, Ui.BLUE, 14, this));
+            openLink.setOnClickListener(v -> CourseLink.open(StudyActivity.this, card.resourceUrl));
+            mediaFrame.addView(openLink, new FrameLayout.LayoutParams(-1, -1));
         } else showMediaError(mediaFrame, getString(R.string.video_source_invalid));
 
         if (videoView != null) addPlayerControls();

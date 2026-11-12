@@ -55,12 +55,12 @@
     <string name="new_course">كورس جديد</string>
     <string name="course_name">اسم الكورس</string>
     <string name="course_name_hint">مثال: كورس في الرياضيات</string>
-    <string name="video_source">مصدر الفيديو</string>
-    <string name="youtube_link">رابط يوتيوب</string>
+    <string name="resource_source">نوع المورد</string>
+    <string name="web_link">رابط</string>
     <string name="local_file">ملف من الجهاز</string>
-    <string name="video_or_playlist_url">رابط فيديو أو قائمة تشغيل</string>
-    <string name="youtube_url_example">youtube.com/watch?v=… أو /playlist?list=…</string>
-    <string name="youtube_url_help">الصق رابط فيديو منفرد أو قائمة تشغيل كاملة (Playlist).</string>
+    <string name="resource_url">الرابط</string>
+    <string name="resource_url_example">https://example.com/course</string>
+    <string name="resource_url_help">أدخل أي رابط عام يبدأ بـ HTTP أو HTTPS. تظل روابط يوتيوب تعمل داخل التطبيق، وتُفتح الروابط الأخرى في المتصفح أو التطبيق المناسب.</string>
     <string name="video_file">ملف الفيديو</string>
     <string name="choose_local_video">اضغط لاختيار فيديو من جهازك</string>
     <string name="repeat_days">أيام تكرار المنبّه</string>
@@ -76,7 +76,9 @@
     <string name="local_file_open_error">تعذر فتح ملفات الجهاز.</string>
     <string name="choose_video_from_device">فيديو من الجهاز</string>
     <string name="course_name_required">اكتب اسم الكورس</string>
-    <string name="invalid_youtube_url">أدخل رابط فيديو أو قائمة تشغيل صحيحة من يوتيوب</string>
+    <string name="invalid_resource_url">أدخل رابطًا عامًا صالحًا يبدأ بـ HTTP أو HTTPS</string>
+    <string name="open_course_link">فتح الرابط</string>
+    <string name="resource_link_open_error">لا يوجد متصفح أو تطبيق يمكنه فتح هذا الرابط.</string>
     <string name="local_video_required">اختر ملف فيديو أولًا.</string>
     <string name="alarm_day_required">اختر يومًا واحدًا على الأقل للمنبّه.</string>
     <string name="course_added">تمت إضافة الكورس</string>

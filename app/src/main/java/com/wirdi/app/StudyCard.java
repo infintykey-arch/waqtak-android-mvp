@@ -10,7 +10,8 @@ import java.util.Locale;
 public class StudyCard {
     public String id = "";
     public String name = "";
-    public String sourceType = "youtube";
+    public String sourceType = "link";
+    public String resourceUrl = "";
     public String youtubeUrl = "";
     public String youtubeId = "";
     public String youtubePlaylistId = "";
@@ -46,7 +47,8 @@ public class StudyCard {
     public JSONObject toJson() throws JSONException {
         JSONObject o = new JSONObject();
         o.put("id", id); o.put("name", name); o.put("sourceType", sourceType);
-        o.put("youtubeUrl", youtubeUrl); o.put("youtubeId", youtubeId);
+        o.put("resourceUrl", resourceUrl); o.put("youtubeUrl", youtubeUrl);
+        o.put("youtubeId", youtubeId);
         o.put("youtubePlaylistId", youtubePlaylistId);
         o.put("localUri", localUri); o.put("localFileName", localFileName);
         o.put("scheduledTime", scheduledTime); o.put("weekdaysMask", weekdaysMask);
@@ -61,7 +63,8 @@ public class StudyCard {
     public static StudyCard fromJson(JSONObject o) {
         StudyCard c = new StudyCard();
         c.id = o.optString("id", ""); c.name = o.optString("name", "");
-        c.sourceType = o.optString("sourceType", "youtube");
+        c.sourceType = o.optString("sourceType", "link");
+        c.resourceUrl = o.optString("resourceUrl", o.optString("youtubeUrl", ""));
         c.youtubeUrl = o.optString("youtubeUrl", ""); c.youtubeId = o.optString("youtubeId", "");
         c.youtubePlaylistId = o.optString("youtubePlaylistId", "");
         c.localUri = o.optString("localUri", ""); c.localFileName = o.optString("localFileName", "");

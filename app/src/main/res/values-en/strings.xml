@@ -55,12 +55,12 @@
     <string name="new_course">New course</string>
     <string name="course_name">Course name</string>
     <string name="course_name_hint">Example: Mathematics course</string>
-    <string name="video_source">Video source</string>
-    <string name="youtube_link">YouTube link</string>
+    <string name="resource_source">Resource type</string>
+    <string name="web_link">Link</string>
     <string name="local_file">Device file</string>
-    <string name="video_or_playlist_url">Video or playlist link</string>
-    <string name="youtube_url_example">youtube.com/watch?v=… or /playlist?list=…</string>
-    <string name="youtube_url_help">Paste a video link or a full YouTube playlist link.</string>
+    <string name="resource_url">Link</string>
+    <string name="resource_url_example">https://example.com/course</string>
+    <string name="resource_url_help">Use any public HTTP or HTTPS link. YouTube links still play in the app; other links open in the browser or matching app.</string>
     <string name="video_file">Video file</string>
     <string name="choose_local_video">Tap to choose a video from your device</string>
     <string name="repeat_days">Reminder days</string>
@@ -76,7 +76,9 @@
     <string name="local_file_open_error">Could not open files on this device.</string>
     <string name="choose_video_from_device">Video from device</string>
     <string name="course_name_required">Enter a course name</string>
-    <string name="invalid_youtube_url">Enter a valid YouTube video or playlist link</string>
+    <string name="invalid_resource_url">Enter a valid public HTTP or HTTPS link</string>
+    <string name="open_course_link">Open link</string>
+    <string name="resource_link_open_error">No browser or app is available to open this link.</string>
     <string name="local_video_required">Choose a video file first.</string>
     <string name="alarm_day_required">Choose at least one reminder day.</string>
     <string name="course_added">Course added</string>

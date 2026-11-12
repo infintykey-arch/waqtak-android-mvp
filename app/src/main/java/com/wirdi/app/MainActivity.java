@@ -97,10 +97,10 @@ public class MainActivity extends LocalizedActivity {
     private Runnable interstitialRetryCallback;
     private boolean exactAlarmPermissionGranted;
     private Dialog formDialog;
-    private EditText nameField, youtubeField;
+    private EditText nameField, resourceUrlField;
     private TextView fileLabel, timeLabel, minutesLabel;
-    private LinearLayout youtubeGroup, localGroup, colorOptions, weekdayOptions;
-    private String formSource = "youtube";
+    private LinearLayout resourceGroup, localGroup, colorOptions, weekdayOptions;
+    private String formSource = "link";
     private Uri selectedLocalUri;
     private String selectedLocalName = "";
     private StudyCard editingCard;
@@ -531,7 +531,7 @@ public class MainActivity extends LocalizedActivity {
     @Override public void onBackPressed(){new AlertDialog.Builder(this).setMessage(getString(R.string.exit_confirmation)).setNegativeButton(getString(R.string.stay),(d,w)->d.dismiss()).setPositiveButton(getString(R.string.exit),(d,w)->finish()).show();}
 
     private void showForm(StudyCard existing) {
-        editingCard=existing; formSource=existing==null?"youtube":existing.sourceType;formColor=existing==null?cards.size()%StudyCard.COLORS.length:existing.colorIndex;formTime=existing==null?"19:00":existing.scheduledTime;formWeekdaysMask=existing==null?StudyCard.ALL_WEEKDAYS:existing.weekdaysMask;formMinutes=existing==null?20:existing.dailyMinutes;
+        editingCard=existing; formSource=existing==null?"link":("local".equals(existing.sourceType)?"local":"link");formColor=existing==null?cards.size()%StudyCard.COLORS.length:existing.colorIndex;formTime=existing==null?"19:00":existing.scheduledTime;formWeekdaysMask=existing==null?StudyCard.ALL_WEEKDAYS:existing.weekdaysMask;formMinutes=existing==null?20:existing.dailyMinutes;
         selectedLocalUri=(existing!=null&&"local".equals(existing.sourceType)&&!existing.localUri.isEmpty())?Uri.parse(existing.localUri):null;
         selectedLocalName=existing==null?"":existing.localFileName;
         Dialog dialog=new Dialog(this);formDialog=dialog;
@@ -539,14 +539,15 @@ public class MainActivity extends LocalizedActivity {
         TextView handle=Ui.text(this,"━━━━━━━━",10,Ui.MUTED,false);handle.setGravity(Gravity.CENTER);panel.addView(handle,new LinearLayout.LayoutParams(-1,Ui.dp(this,17)));
         TextView heading=Ui.text(this,existing==null?getString(R.string.new_course):getString(R.string.edit_course),19,Ui.WHITE,true);LinearLayout.LayoutParams h=new LinearLayout.LayoutParams(-1,Ui.dp(this,43));h.bottomMargin=Ui.dp(this,8);panel.addView(heading,h);
         addLabel(panel,getString(R.string.course_name));nameField=edit(getString(R.string.course_name_hint),existing==null?"":existing.name,InputType.TYPE_CLASS_TEXT);panel.addView(nameField,fieldParams());
-        addLabel(panel,getString(R.string.video_source));LinearLayout switcher=new LinearLayout(this);switcher.setOrientation(LinearLayout.HORIZONTAL);
-        Button youtube=Ui.button(this,getString(R.string.youtube_link),Ui.SURFACE2,Ui.WHITE);Button local=Ui.button(this,getString(R.string.local_file),Ui.SURFACE2,Ui.WHITE);
-        LinearLayout.LayoutParams sw=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw.setMarginStart(Ui.dp(this,4));switcher.addView(youtube,sw);LinearLayout.LayoutParams sw2=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw2.setMarginEnd(Ui.dp(this,4));switcher.addView(local,sw2);panel.addView(switcher);
-        youtubeGroup=new LinearLayout(this);youtubeGroup.setOrientation(LinearLayout.VERTICAL);addLabel(youtubeGroup,getString(R.string.video_or_playlist_url));youtubeField=edit(getString(R.string.youtube_url_example),existing==null?"":existing.youtubeUrl,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);youtubeGroup.addView(youtubeField,fieldParams());
-        TextView youtubeHint=Ui.text(this,getString(R.string.youtube_url_help),10,Ui.MUTED,false);LinearLayout.LayoutParams youtubeHintLp=new LinearLayout.LayoutParams(-1,Ui.dp(this,26));youtubeHintLp.topMargin=Ui.dp(this,2);youtubeGroup.addView(youtubeHint,youtubeHintLp);panel.addView(youtubeGroup);
+        addLabel(panel,getString(R.string.resource_source));LinearLayout switcher=new LinearLayout(this);switcher.setOrientation(LinearLayout.HORIZONTAL);
+        Button linkButton=Ui.button(this,getString(R.string.web_link),Ui.SURFACE2,Ui.WHITE);Button local=Ui.button(this,getString(R.string.local_file),Ui.SURFACE2,Ui.WHITE);
+        LinearLayout.LayoutParams sw=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw.setMarginStart(Ui.dp(this,4));switcher.addView(linkButton,sw);LinearLayout.LayoutParams sw2=new LinearLayout.LayoutParams(0,Ui.dp(this,44),1);sw2.setMarginEnd(Ui.dp(this,4));switcher.addView(local,sw2);panel.addView(switcher);
+        String currentUrl=existing==null?"":(existing.resourceUrl.isEmpty()?existing.youtubeUrl:existing.resourceUrl);
+        resourceGroup=new LinearLayout(this);resourceGroup.setOrientation(LinearLayout.VERTICAL);addLabel(resourceGroup,getString(R.string.resource_url));resourceUrlField=edit(getString(R.string.resource_url_example),currentUrl,InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);resourceGroup.addView(resourceUrlField,fieldParams());
+        TextView linkHint=Ui.text(this,getString(R.string.resource_url_help),10,Ui.MUTED,false);linkHint.setMaxLines(2);LinearLayout.LayoutParams linkHintLp=new LinearLayout.LayoutParams(-1,Ui.dp(this,38));linkHintLp.topMargin=Ui.dp(this,2);resourceGroup.addView(linkHint,linkHintLp);panel.addView(resourceGroup);
         localGroup=new LinearLayout(this);localGroup.setOrientation(LinearLayout.VERTICAL);addLabel(localGroup,getString(R.string.video_file));fileLabel=Ui.text(this,selectedLocalName.isEmpty()?getString(R.string.choose_local_video):selectedLocalName,12,Ui.SILVER,false);fileLabel.setGravity(Gravity.CENTER);fileLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));panel.addView(localGroup);localGroup.addView(fileLabel,new LinearLayout.LayoutParams(-1,Ui.dp(this,50)));fileLabel.setOnClickListener(v->pickVideo());
-        Runnable updateSource=()->{boolean yt="youtube".equals(formSource);youtubeGroup.setVisibility(yt?View.VISIBLE:View.GONE);localGroup.setVisibility(yt?View.GONE:View.VISIBLE);youtube.setBackground(Ui.shape(yt?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));local.setBackground(Ui.shape(!yt?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));};
-        youtube.setOnClickListener(v->{formSource="youtube";updateSource.run();});local.setOnClickListener(v->{formSource="local";updateSource.run();});updateSource.run();
+        Runnable updateSource=()->{boolean link="link".equals(formSource);resourceGroup.setVisibility(link?View.VISIBLE:View.GONE);localGroup.setVisibility(link?View.GONE:View.VISIBLE);linkButton.setBackground(Ui.shape(link?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));local.setBackground(Ui.shape(!link?Ui.BLUE:Ui.SURFACE2,Color.TRANSPARENT,12,this));};
+        linkButton.setOnClickListener(v->{formSource="link";updateSource.run();});local.setOnClickListener(v->{formSource="local";updateSource.run();});updateSource.run();
         addLabel(panel,getString(R.string.repeat_days));weekdayOptions=new LinearLayout(this);weekdayOptions.setOrientation(LinearLayout.HORIZONTAL);weekdayOptions.setGravity(Gravity.CENTER);for(int i=0;i<WEEKDAY_SHORT.length;i++)addWeekdayOption(i);panel.addView(weekdayOptions,new LinearLayout.LayoutParams(-1,Ui.dp(this,40)));
         TextView weekdayHint=Ui.text(this,getString(R.string.choose_at_least_one_day),10,Ui.MUTED,false);LinearLayout.LayoutParams weekdayHintLp=new LinearLayout.LayoutParams(-1,Ui.dp(this,20));weekdayHintLp.topMargin=Ui.dp(this,2);panel.addView(weekdayHint,weekdayHintLp);
         addLabel(panel,getString(R.string.alarm_time));timeLabel=Ui.text(this,fmtTime(formTime)+"   ◷",15,Ui.WHITE,true);timeLabel.setGravity(Gravity.CENTER);timeLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));panel.addView(timeLabel,fieldParams());timeLabel.setOnClickListener(v->showTimePicker());
@@ -568,13 +569,13 @@ public class MainActivity extends LocalizedActivity {
     private String displayName(Uri uri){try(android.database.Cursor c=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return getString(R.string.choose_video_from_device);}
     private void saveForm(Dialog dialog){
         String name=nameField.getText().toString().trim();if(name.isEmpty()){nameField.setError(getString(R.string.course_name_required));return;}
-        String url=youtubeField.getText().toString().trim();YoutubeLink parsedLink="youtube".equals(formSource)?YoutubeLink.parse(url):null;String vid=parsedLink==null?"":parsedLink.videoId;String playlistId=parsedLink==null?"":parsedLink.playlistId;
-        if("youtube".equals(formSource)&&parsedLink==null){youtubeField.setError(getString(R.string.invalid_youtube_url));return;}
+        String url=resourceUrlField.getText().toString().trim();YoutubeLink parsedLink="link".equals(formSource)?YoutubeLink.parse(url):null;String vid=parsedLink==null?"":parsedLink.videoId;String playlistId=parsedLink==null?"":parsedLink.playlistId;
+        if("link".equals(formSource)&&!CourseLink.isValidHttpUrl(url)){resourceUrlField.setError(getString(R.string.invalid_resource_url));return;}
         if("local".equals(formSource)&&selectedLocalUri==null&&!(editingCard!=null&&!editingCard.localUri.isEmpty())){Toast.makeText(this,getString(R.string.local_video_required),Toast.LENGTH_SHORT).show();return;}
         if(formWeekdaysMask==0){Toast.makeText(this,getString(R.string.alarm_day_required),Toast.LENGTH_SHORT).show();return;}
         StudyCard c=editingCard==null?new StudyCard():editingCard;if(editingCard==null){c.id=UUID.randomUUID().toString();c.elapsedToday=0;c.streak=0;}
         c.name=name;c.sourceType=formSource;c.scheduledTime=formTime;c.weekdaysMask=formWeekdaysMask;c.dailyMinutes=formMinutes;c.colorIndex=formColor;
-        if("youtube".equals(formSource)){c.youtubeUrl=url;c.youtubeId=vid;c.youtubePlaylistId=playlistId;c.localUri="";c.localFileName="";}else{if(selectedLocalUri!=null){c.localUri=selectedLocalUri.toString();c.localFileName=selectedLocalName;}c.youtubeUrl="";c.youtubeId="";c.youtubePlaylistId="";}
+        if("link".equals(formSource)){c.resourceUrl=url;c.youtubeUrl=url;c.youtubeId=vid;c.youtubePlaylistId=playlistId;c.localUri="";c.localFileName="";}else{if(selectedLocalUri!=null){c.localUri=selectedLocalUri.toString();c.localFileName=selectedLocalName;}c.resourceUrl="";c.youtubeUrl="";c.youtubeId="";c.youtubePlaylistId="";}
         if(editingCard==null)cards.add(c);saveCards();AlarmScheduler.scheduleDaily(this,c);dialog.dismiss();render();Toast.makeText(this,editingCard==null?getString(R.string.course_added):getString(R.string.changes_saved),Toast.LENGTH_SHORT).show();
     }
     private void saveCards(){StudyStore.save(this,cards);}
