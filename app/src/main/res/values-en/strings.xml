@@ -108,6 +108,7 @@
     <string name="video_watched_prefix">Watched  </string>
     <string name="resume_time_tracking">▶   Resume time tracking</string>
     <string name="session_progress_minutes">%1$d of %2$d min</string>
+    <string name="session_seek_hint">Drag back; you can’t move past the last recorded point</string>
     <string name="session_complete_title">Time is up</string>
     <string name="continue_studying">Continue</string>
     <string name="color_blue">Blue</string>
@@ -117,6 +118,12 @@
     <string name="color_purple">Purple</string>
     <string name="default_alarm_name">Your daily reminder</string>
     <string name="alarm_screen_title">It is time to study</string>
+    <string name="incomplete_reminder_title">Continue your course?</string>
+    <string name="incomplete_reminder_text">Continue “%1$s” now, or leave it for its next scheduled time?</string>
+    <string name="continue_course_now">Continue now</string>
+    <string name="not_now">Not now</string>
+    <string name="incomplete_reminder_channel_name">Course follow-up reminders</string>
+    <string name="incomplete_reminder_channel_description">Quiet notification for an unfinished course</string>
     <string name="start_now">Start now</string>
     <string name="snooze_five_minutes">Snooze 5 minutes</string>
     <string name="daily_snooze_limit_reached">You have used all 3 snoozes for today. Start the study session instead.</string>

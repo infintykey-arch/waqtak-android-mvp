@@ -25,12 +25,14 @@ public class StudyCard {
     public int colorIndex = 0;
     public int span = 1;
     public long elapsedToday = 0;
+    public long maxElapsedToday = 0;
     public long positionSeconds = 0;
     public String lastDate = "";
     public String triggeredDate = "";
     public String completedDate = "";
     public int streak = 0;
     public long autoReminderAtMillis = 0;
+    public String autoReminderDate = "";
 
     public static final String[] COLORS = {"#438BFF", "#77B9FF", "#AAB8C8", "#47C4C0", "#8E8EFF"};
 
@@ -42,7 +44,10 @@ public class StudyCard {
 
     public void resetForNewDay() {
         String now = today();
-        if (!now.equals(lastDate)) elapsedToday = 0;
+        if (!now.equals(lastDate)) {
+            elapsedToday = 0;
+            maxElapsedToday = 0;
+        }
     }
 
     public JSONObject toJson() throws JSONException {
@@ -55,10 +60,10 @@ public class StudyCard {
         o.put("scheduledTime", scheduledTime); o.put("weekdaysMask", weekdaysMask);
         o.put("dailyMinutes", dailyMinutes);
         o.put("colorIndex", colorIndex); o.put("span", span);
-        o.put("elapsedToday", elapsedToday); o.put("positionSeconds", positionSeconds);
+        o.put("elapsedToday", elapsedToday); o.put("maxElapsedToday", maxElapsedToday); o.put("positionSeconds", positionSeconds);
         o.put("lastDate", lastDate); o.put("triggeredDate", triggeredDate);
         o.put("completedDate", completedDate); o.put("streak", streak);
-        o.put("autoReminderAtMillis", autoReminderAtMillis);
+        o.put("autoReminderAtMillis", autoReminderAtMillis); o.put("autoReminderDate", autoReminderDate);
         return o;
     }
 
@@ -77,10 +82,15 @@ public class StudyCard {
         c.colorIndex = Math.max(0, Math.min(COLORS.length - 1, o.optInt("colorIndex", 0)));
         c.span = Math.max(1, o.optInt("span", 1));
         c.elapsedToday = Math.max(0, o.optLong("elapsedToday", 0));
+        long dailyGoalSeconds = c.dailyMinutes * 60L;
+        c.elapsedToday = Math.min(c.elapsedToday, dailyGoalSeconds);
+        c.maxElapsedToday = Math.max(c.elapsedToday, o.optLong("maxElapsedToday", c.elapsedToday));
+        c.maxElapsedToday = Math.min(c.maxElapsedToday, dailyGoalSeconds);
         c.positionSeconds = Math.max(0, o.optLong("positionSeconds", 0));
         c.lastDate = o.optString("lastDate", ""); c.triggeredDate = o.optString("triggeredDate", "");
         c.completedDate = o.optString("completedDate", ""); c.streak = Math.max(0, o.optInt("streak", 0));
         c.autoReminderAtMillis = Math.max(0, o.optLong("autoReminderAtMillis", 0));
+        c.autoReminderDate = o.optString("autoReminderDate", "");
         return c;
     }
 }

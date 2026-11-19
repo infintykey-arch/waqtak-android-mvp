@@ -108,6 +108,7 @@
     <string name="video_watched_prefix">المشاهَد  </string>
     <string name="resume_time_tracking">▶   استئناف احتساب الوقت</string>
     <string name="session_progress_minutes">%1$d من %2$d دقيقة</string>
+    <string name="session_seek_hint">اسحب للرجوع؛ لا يمكن التقديم بعد آخر نقطة مسجلة</string>
     <string name="session_complete_title">انتهى الوقت المحدد</string>
     <string name="continue_studying">إكمال</string>
     <string name="color_blue">أزرق</string>
@@ -117,6 +118,12 @@
     <string name="color_purple">بنفسجي</string>
     <string name="default_alarm_name">موعدك اليومي</string>
     <string name="alarm_screen_title">حان وقت جلسة المذاكرة</string>
+    <string name="incomplete_reminder_title">متابعة الكورس؟</string>
+    <string name="incomplete_reminder_text">هل تريد متابعة «%1$s» الآن أم تركه لموعده القادم؟</string>
+    <string name="continue_course_now">أكمل الآن</string>
+    <string name="not_now">ليس الآن</string>
+    <string name="incomplete_reminder_channel_name">تذكير متابعة الكورس</string>
+    <string name="incomplete_reminder_channel_description">إشعار هادئ لمتابعة كورس غير مكتمل</string>
     <string name="start_now">ابدأ الآن</string>
     <string name="snooze_five_minutes">تأجيل ٥ دقائق</string>
     <string name="daily_snooze_limit_reached">استنفدت مرات التأجيل الثلاث لهذا اليوم. ابدأ الجلسة بدلًا من ذلك.</string>

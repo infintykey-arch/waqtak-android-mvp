@@ -22,6 +22,13 @@ public class AlarmReceiver extends BroadcastReceiver {
     private static final String LEGACY_DEFAULT_SOUND_NAME = "\u0646\u063a\u0645\u0629 \u0627\u0644\u0625\u0634\u0639\u0627\u0631 \u0627\u0644\u0627\u0641\u062a\u0631\u0627\u0636\u064a\u0629";
 
     public static int notificationId(String id) { return 47000 + Math.abs(id.hashCode() % 20000); }
+    public static int reminderNotificationId(String id) { return notificationId(id) + 20_000; }
+
+    public static void cancelReminderNotification(Context context, String id) {
+        if (context == null || id == null || id.isEmpty()) return;
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager != null) manager.cancel(reminderNotificationId(id));
+    }
 
     public static Uri selectedSoundUri(Context context) {
         String saved = preferences(context).getString(PREF_SOUND_URI, null);
@@ -78,6 +85,11 @@ public class AlarmReceiver extends BroadcastReceiver {
 
     @Override public void onReceive(Context context, Intent intent) {
         context = AppLocale.wrap(context);
+        if (intent != null && AlarmScheduler.ACTION_REMINDER_NOT_NOW.equals(intent.getAction())) {
+            cancelReminderNotification(context, intent.getStringExtra(AlarmScheduler.EXTRA_ID));
+            return;
+        }
+        if (intent == null) return;
         String id = intent.getStringExtra(AlarmScheduler.EXTRA_ID);
         String name = intent.getStringExtra(AlarmScheduler.EXTRA_NAME);
         boolean snooze = intent.getBooleanExtra(AlarmScheduler.EXTRA_SNOOZE, false);
@@ -103,8 +115,13 @@ public class AlarmReceiver extends BroadcastReceiver {
             StudyStore.save(context, cards);
         } else if (!snooze) {
             card.triggeredDate = StudyCard.today();
+            card.autoReminderDate = "";
             StudyStore.save(context, cards);
             AlarmScheduler.scheduleDaily(context, card);
+        }
+        if (autoReminder) {
+            showIncompleteReminder(context, card, name);
+            return;
         }
         ensureChannel(context);
         AlarmSoundService.start(context, id, name);
@@ -128,5 +145,56 @@ public class AlarmReceiver extends BroadcastReceiver {
                 .setFullScreenIntent(fullPi, true).setContentIntent(contentPi)
                 .setVibrate(new long[]{0, 500, 250, 500, 250, 900}).build();
         nm.notify(notificationId(id), notification);
+    }
+
+    private static void showIncompleteReminder(Context context, StudyCard card, String name) {
+        NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel channel = manager.getNotificationChannel("waqtak_incomplete_course_reminders");
+            if (channel == null) {
+                channel = new NotificationChannel("waqtak_incomplete_course_reminders",
+                        context.getString(R.string.incomplete_reminder_channel_name), NotificationManager.IMPORTANCE_DEFAULT);
+            }
+            channel.setName(context.getString(R.string.incomplete_reminder_channel_name));
+            channel.setDescription(context.getString(R.string.incomplete_reminder_channel_description));
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+            channel.enableLights(false);
+            manager.createNotificationChannel(channel);
+        }
+
+        Intent continueIntent = new Intent(context, StudyActivity.class)
+                .setAction(AlarmScheduler.ACTION_REMINDER)
+                .setData(Uri.parse("wirdi://reminder/" + card.id + "/continue"))
+                .putExtra(AlarmScheduler.EXTRA_ID, card.id)
+                .putExtra(AlarmScheduler.EXTRA_NAME, name)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= 23) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent continuePending = PendingIntent.getActivity(context, reminderNotificationId(card.id), continueIntent, flags);
+
+        Intent notNowIntent = new Intent(context, AlarmReceiver.class)
+                .setAction(AlarmScheduler.ACTION_REMINDER_NOT_NOW)
+                .setData(Uri.parse("wirdi://reminder/" + card.id + "/not-now"))
+                .putExtra(AlarmScheduler.EXTRA_ID, card.id);
+        PendingIntent notNowPending = PendingIntent.getBroadcast(context, reminderNotificationId(card.id) + 1, notNowIntent, flags);
+
+        String message = context.getString(R.string.incomplete_reminder_text, name);
+        Notification.Builder builder = Build.VERSION.SDK_INT >= 26
+                ? new Notification.Builder(context, "waqtak_incomplete_course_reminders")
+                : new Notification.Builder(context).setPriority(Notification.PRIORITY_DEFAULT).setSound(null).setVibrate(new long[0]);
+        Notification notification = builder.setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(context.getString(R.string.incomplete_reminder_title))
+                .setContentText(message)
+                .setStyle(new Notification.BigTextStyle().bigText(message))
+                .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setAutoCancel(true)
+                .setContentIntent(continuePending)
+                .addAction(android.R.drawable.ic_media_play, context.getString(R.string.continue_course_now), continuePending)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, context.getString(R.string.not_now), notNowPending)
+                .build();
+        manager.notify(reminderNotificationId(card.id), notification);
     }
 }

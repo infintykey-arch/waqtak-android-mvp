@@ -14,6 +14,7 @@ public final class AlarmScheduler {
     public static final String ACTION_ALARM = "com.wirdi.app.DAILY_ALARM";
     public static final String ACTION_SNOOZE = "com.wirdi.app.SNOOZE_ALARM";
     public static final String ACTION_REMINDER = "com.wirdi.app.INCOMPLETE_TASK_REMINDER";
+    public static final String ACTION_REMINDER_NOT_NOW = "com.wirdi.app.INCOMPLETE_TASK_REMINDER_NOT_NOW";
     public static final String EXTRA_ID = "card_id";
     public static final String EXTRA_NAME = "card_name";
     public static final String EXTRA_SNOOZE = "is_snooze";
@@ -97,13 +98,15 @@ public final class AlarmScheduler {
 
     /** Schedules an automatic retry without touching the user's manual snooze count. */
     public static boolean scheduleIncompleteReminder(Context context, StudyCard card) {
-        if (context == null || card == null || card.id.isEmpty() || card.doneToday()) return false;
+        if (context == null || card == null || card.id.isEmpty() || card.doneToday()
+                || StudyCard.today().equals(card.autoReminderDate)) return false;
         AlarmManager manager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (manager == null) return false;
         long at = System.currentTimeMillis() + INCOMPLETE_REMINDER_DELAY_MS;
         PendingIntent pending = reminderPendingIntent(context, card.id, card.name);
         if (!scheduleOneShot(manager, at, pending)) return false;
         card.autoReminderAtMillis = at;
+        card.autoReminderDate = StudyCard.today();
         saveCard(context, card);
         return true;
     }
@@ -125,6 +128,10 @@ public final class AlarmScheduler {
             manager.cancel(pending);
             if (card.doneToday() && card.autoReminderAtMillis > 0) cancelIncompleteReminder(context, card);
             return;
+        }
+        if (card.autoReminderDate.isEmpty()) {
+            card.autoReminderDate = StudyCard.today();
+            saveCard(context, card);
         }
         long at = card.autoReminderAtMillis;
         if (at <= System.currentTimeMillis()) {

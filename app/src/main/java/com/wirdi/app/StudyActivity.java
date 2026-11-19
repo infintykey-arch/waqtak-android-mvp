@@ -30,7 +30,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
-import android.widget.ProgressBar;
+import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -108,6 +108,7 @@ public class StudyActivity extends LocalizedActivity {
     private StudyCard card;
     private int secondsSinceLastSave = 0;
     private boolean paused = false;
+    private boolean adjustingTimerProgress = false;
     private boolean completionReady = false;
     private boolean completedThisSession = false;
     private boolean sessionClosing = false;
@@ -139,7 +140,7 @@ public class StudyActivity extends LocalizedActivity {
 
     private TextView timeLabel, toggleLabel, progressLabel, videoTimeLabel, fullscreenButton, speedButton, speedIndicator, gestureIndicator;
     private TextView addNoteButton;
-    private ProgressBar progressBar;
+    private SeekBar timerSeekBar;
     private LinearLayout root, header, body, playerControls;
     private TextView stopButton;
     private ObjectAnimator completionPulse;
@@ -175,16 +176,20 @@ public class StudyActivity extends LocalizedActivity {
             String today = StudyCard.today();
             if (!today.equals(card.lastDate)) {
                 card.elapsedToday = 0;
+                card.maxElapsedToday = 0;
                 card.lastDate = today;
                 completionReady = false;
                 secondsSinceLastSave = 0;
                 save();
                 updateTimerUi();
             }
-            if (!paused && !completionReady && !card.doneToday()
+            if (!paused && !completionReady && !card.doneToday() && !adjustingTimerProgress
                     && (!"local".equals(card.sourceType) || (localReady && videoView != null && videoView.isPlaying()))) {
                 long goal = card.dailyMinutes * 60L;
-                if (card.elapsedToday < goal) card.elapsedToday++;
+                if (card.elapsedToday < goal) {
+                    card.elapsedToday++;
+                    card.maxElapsedToday = Math.max(card.maxElapsedToday, card.elapsedToday);
+                }
                 card.lastDate = today;
                 if ("local".equals(card.sourceType) && videoView != null && videoView.isPlaying()) {
                     card.positionSeconds = Math.max(0, videoView.getCurrentPosition() / 1000L);
@@ -218,6 +223,7 @@ public class StudyActivity extends LocalizedActivity {
         card.lastDate = StudyCard.today();
         completionReady = !card.doneToday() && card.elapsedToday >= card.dailyMinutes * 60L;
         AlarmScheduler.cancelIncompleteReminder(this, card);
+        AlarmReceiver.cancelReminderNotification(this, card.id);
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         initialRequestedOrientation = getRequestedOrientation();
         buildUi();
@@ -300,10 +306,38 @@ public class StudyActivity extends LocalizedActivity {
         body.addView(remaining, new LinearLayout.LayoutParams(-1, Ui.dp(this,32)));
         timeLabel = Ui.text(this, "00:00", 42, Ui.WHITE, true); timeLabel.setGravity(Gravity.CENTER);
         body.addView(timeLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,68)));
-        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progressBar.setMax(100); progressBar.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.BLUE)); progressBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE2));
-        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-1, Ui.dp(this,7)); plp.topMargin = Ui.dp(this,8); plp.bottomMargin = Ui.dp(this,8); body.addView(progressBar, plp);
+        timerSeekBar = new SeekBar(this);
+        timerSeekBar.setMax(Math.max(1, card.dailyMinutes * 60));
+        timerSeekBar.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.BLUE));
+        timerSeekBar.setSecondaryProgressTintList(android.content.res.ColorStateList.valueOf(Ui.GREEN));
+        timerSeekBar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE2));
+        timerSeekBar.setThumbTintList(android.content.res.ColorStateList.valueOf(Ui.BLUE));
+        timerSeekBar.setContentDescription(getString(R.string.session_seek_hint));
+        timerSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { adjustingTimerProgress = true; }
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (!fromUser || card == null) return;
+                int maxAllowed = (int) Math.min(seekBar.getMax(), card.maxElapsedToday);
+                if (progress > maxAllowed) {
+                    progress = maxAllowed;
+                    seekBar.setProgress(maxAllowed);
+                }
+                card.elapsedToday = progress;
+                completionReady = !card.doneToday() && card.elapsedToday >= card.dailyMinutes * 60L;
+                updateTimerUi();
+            }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                adjustingTimerProgress = false;
+                secondsSinceLastSave = 0;
+                save();
+                updateTimerUi();
+            }
+        });
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-1, Ui.dp(this,32)); plp.topMargin = Ui.dp(this,3); plp.bottomMargin = Ui.dp(this,3); body.addView(timerSeekBar, plp);
         progressLabel = Ui.text(this, "", 12, Ui.MUTED, false); progressLabel.setGravity(Gravity.CENTER);
         body.addView(progressLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,28)));
+        TextView progressHint = Ui.text(this, getString(R.string.session_seek_hint), 10, Ui.MUTED, false); progressHint.setGravity(Gravity.CENTER);
+        body.addView(progressHint, new LinearLayout.LayoutParams(-1, Ui.dp(this,20)));
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,50)); actionLp.topMargin = Ui.dp(this,12);
         TextView toggle = Ui.text(this, getString(R.string.pause_time_tracking), 14, Ui.SILVER, true); toggle.setGravity(Gravity.CENTER);
@@ -825,7 +859,11 @@ public class StudyActivity extends LocalizedActivity {
         long goal = card.dailyMinutes * 60L;
         long remaining = Math.max(0, goal - card.elapsedToday);
         timeLabel.setText(String.format(Locale.US, "%02d:%02d", remaining / 60, remaining % 60));
-        progressBar.setProgress((int)Math.min(100, card.elapsedToday * 100 / Math.max(1, goal)));
+        int maxReached = (int) Math.min(goal, Math.max(card.elapsedToday, card.maxElapsedToday));
+        timerSeekBar.setMax((int) Math.max(1, goal));
+        timerSeekBar.setSecondaryProgress(maxReached);
+        timerSeekBar.setProgress((int) Math.min(card.elapsedToday, maxReached));
+        timerSeekBar.setEnabled(!card.doneToday());
         progressLabel.setText(String.format(Locale.US, getString(R.string.session_progress_minutes), Math.min(card.elapsedToday / 60, card.dailyMinutes), card.dailyMinutes));
         updateFinishAction();
         updateToggle();
