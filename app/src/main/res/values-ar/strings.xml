@@ -60,7 +60,7 @@
     <string name="local_file">ملف من الجهاز</string>
     <string name="resource_url">الرابط</string>
     <string name="resource_url_example">https://example.com/course</string>
-    <string name="resource_url_help">أدخل أي رابط عام يبدأ بـ HTTP أو HTTPS. تظل روابط يوتيوب تعمل داخل التطبيق، وتُفتح الروابط الأخرى في المتصفح أو التطبيق المناسب.</string>
+    <string name="resource_url_help">أدخل أي رابط عام يبدأ بـ HTTP أو HTTPS. سيُعرض داخل التطبيق متى سمح الموقع بذلك؛ قد تمنع بعض المواقع التشغيل المضمن.</string>
     <string name="video_file">ملف الفيديو</string>
     <string name="choose_local_video">اضغط لاختيار فيديو من جهازك</string>
     <string name="repeat_days">أيام تكرار المنبّه</string>
@@ -91,8 +91,10 @@
     <string name="video_source_invalid">لا يوجد مصدر فيديو صالح لهذا الكورس.</string>
     <string name="session_time_remaining">الوقت المتبقي من جلسة اليوم</string>
     <string name="pause_time_tracking">Ⅱ   إيقاف احتساب الوقت مؤقتًا</string>
-    <string name="auto_save_note">يمكن إيقاف المؤقّت دون إنهاء الفيديو. يُحفظ تقدّمك تلقائيًا.</string>
+    <string name="auto_save_note">يمكن إيقاف احتساب الوقت مؤقتًا. إذا أنهيت الجلسة قبل إكمال المدة، سيعود التنبيه بعد ٥ دقائق.</string>
     <string name="end_session">إنهاء الجلسة</string>
+    <string name="finish_task">إنهاء المهمة ✓</string>
+    <string name="web_video_load_error">تعذر تحميل الصفحة. قد يمنع الموقع التشغيل داخل التطبيق.</string>
     <string name="video_remaining_default">المتبقي −—:—</string>
     <string name="toggle_video_time_description">اضغط للتبديل بين الوقت المتبقي والوقت المشاهَد من الفيديو</string>
     <string name="speed_button_suffix"> السرعة</string>

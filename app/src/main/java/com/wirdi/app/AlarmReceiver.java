@@ -81,6 +81,8 @@ public class AlarmReceiver extends BroadcastReceiver {
         String id = intent.getStringExtra(AlarmScheduler.EXTRA_ID);
         String name = intent.getStringExtra(AlarmScheduler.EXTRA_NAME);
         boolean snooze = intent.getBooleanExtra(AlarmScheduler.EXTRA_SNOOZE, false);
+        boolean autoReminder = AlarmScheduler.ACTION_REMINDER.equals(intent.getAction())
+                || intent.getBooleanExtra(AlarmScheduler.EXTRA_AUTO_REMINDER, false);
         if (id == null) return;
         ArrayList<StudyCard> cards = StudyStore.load(context);
         StudyCard card = null;
@@ -88,8 +90,18 @@ public class AlarmReceiver extends BroadcastReceiver {
             if (candidate.id.equals(id)) { card = candidate; break; }
         }
         if (card == null) return;
+        if (autoReminder && (card.doneToday() || card.autoReminderAtMillis <= 0)) {
+            if (card.autoReminderAtMillis > 0) {
+                card.autoReminderAtMillis = 0;
+                StudyStore.save(context, cards);
+            }
+            return;
+        }
         if (name == null || name.isEmpty()) name = card.name;
-        if (!snooze) {
+        if (autoReminder) {
+            card.autoReminderAtMillis = 0;
+            StudyStore.save(context, cards);
+        } else if (!snooze) {
             card.triggeredDate = StudyCard.today();
             StudyStore.save(context, cards);
             AlarmScheduler.scheduleDaily(context, card);

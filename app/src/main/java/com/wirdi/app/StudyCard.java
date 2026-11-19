@@ -30,6 +30,7 @@ public class StudyCard {
     public String triggeredDate = "";
     public String completedDate = "";
     public int streak = 0;
+    public long autoReminderAtMillis = 0;
 
     public static final String[] COLORS = {"#438BFF", "#77B9FF", "#AAB8C8", "#47C4C0", "#8E8EFF"};
 
@@ -57,6 +58,7 @@ public class StudyCard {
         o.put("elapsedToday", elapsedToday); o.put("positionSeconds", positionSeconds);
         o.put("lastDate", lastDate); o.put("triggeredDate", triggeredDate);
         o.put("completedDate", completedDate); o.put("streak", streak);
+        o.put("autoReminderAtMillis", autoReminderAtMillis);
         return o;
     }
 
@@ -78,6 +80,7 @@ public class StudyCard {
         c.positionSeconds = Math.max(0, o.optLong("positionSeconds", 0));
         c.lastDate = o.optString("lastDate", ""); c.triggeredDate = o.optString("triggeredDate", "");
         c.completedDate = o.optString("completedDate", ""); c.streak = Math.max(0, o.optInt("streak", 0));
+        c.autoReminderAtMillis = Math.max(0, o.optLong("autoReminderAtMillis", 0));
         return c;
     }
 }

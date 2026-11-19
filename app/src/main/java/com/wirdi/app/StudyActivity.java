@@ -2,6 +2,8 @@ package com.wirdi.app;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -19,8 +21,10 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -100,8 +104,10 @@ public class StudyActivity extends LocalizedActivity {
     private StudyCard card;
     private int secondsSinceLastSave = 0;
     private boolean paused = false;
-    private boolean completionShown = false;
+    private boolean completionReady = false;
     private boolean completedThisSession = false;
+    private boolean sessionClosing = false;
+    private boolean finishActionReady = false;
     private boolean localReady = false;
     private boolean isVideoFullscreen = false;
     private boolean youtubeNativeFullscreen = false;
@@ -129,6 +135,7 @@ public class StudyActivity extends LocalizedActivity {
     private ProgressBar progressBar;
     private LinearLayout root, header, body, playerControls;
     private TextView stopButton;
+    private ObjectAnimator completionPulse;
     private FrameLayout mediaFrame;
     private FitVideoView videoView;
     private MediaController localMediaController;
@@ -157,11 +164,20 @@ public class StudyActivity extends LocalizedActivity {
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
-            if (card == null || isFinishing()) return;
-            if (!paused && (!"local".equals(card.sourceType) || (localReady && videoView != null && videoView.isPlaying()))) {
-                String today = StudyCard.today();
-                if (!today.equals(card.lastDate)) card.elapsedToday = 0;
-                card.elapsedToday++;
+            if (card == null || isFinishing() || sessionClosing) return;
+            String today = StudyCard.today();
+            if (!today.equals(card.lastDate)) {
+                card.elapsedToday = 0;
+                card.lastDate = today;
+                completionReady = false;
+                secondsSinceLastSave = 0;
+                save();
+                updateTimerUi();
+            }
+            if (!paused && !completionReady && !card.doneToday()
+                    && (!"local".equals(card.sourceType) || (localReady && videoView != null && videoView.isPlaying()))) {
+                long goal = card.dailyMinutes * 60L;
+                if (card.elapsedToday < goal) card.elapsedToday++;
                 card.lastDate = today;
                 if ("local".equals(card.sourceType) && videoView != null && videoView.isPlaying()) {
                     card.positionSeconds = Math.max(0, videoView.getCurrentPosition() / 1000L);
@@ -170,8 +186,11 @@ public class StudyActivity extends LocalizedActivity {
                     videoDurationSeconds = duration > 0 ? duration / 1000.0 : 0;
                     updateVideoTimeLabel();
                 } else card.positionSeconds++;
-                if (card.elapsedToday >= card.dailyMinutes * 60L && !completionShown) {
-                    completionShown = true; completedThisSession = true; markCompleted(card); secondsSinceLastSave = 0; save(); showCompletedDialog();
+                if (card.elapsedToday >= goal) {
+                    card.elapsedToday = goal;
+                    completionReady = true;
+                    secondsSinceLastSave = 0;
+                    save();
                 } else if (++secondsSinceLastSave >= SAVE_INTERVAL_SECONDS) {
                     secondsSinceLastSave = 0;
                     save();
@@ -189,6 +208,9 @@ public class StudyActivity extends LocalizedActivity {
         card = StudyStore.find(this, cardId == null ? "" : cardId);
         if (card == null) { finish(); return; }
         card.resetForNewDay();
+        card.lastDate = StudyCard.today();
+        completionReady = !card.doneToday() && card.elapsedToday >= card.dailyMinutes * 60L;
+        AlarmScheduler.cancelIncompleteReminder(this, card);
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
         initialRequestedOrientation = getRequestedOrientation();
         buildUi();
@@ -232,26 +254,8 @@ public class StudyActivity extends LocalizedActivity {
                 videoView.setOnErrorListener((mp, what, extra) -> { localReady = false; return false; });
             } catch (Exception e) { showMediaError(mediaFrame, getString(R.string.video_open_error)); }
         } else if (YoutubeLink.isVideoId(card.youtubeId) || YoutubeLink.isPlaylistId(card.youtubePlaylistId)) {
-            webView = new WebView(this); webView.setBackgroundColor(Color.BLACK);
-            WebSettings settings = webView.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setMediaPlaybackRequiresUserGesture(false);
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override public void onShowCustomView(View view, CustomViewCallback callback) {
-                    if (youtubeCustomView != null) { callback.onCustomViewHidden(); return; }
-                    youtubeCustomView = view;
-                    youtubeCustomViewCallback = callback;
-                    youtubeOriginalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
-                    youtubeFullscreenContainer = new FrameLayout(StudyActivity.this);
-                    youtubeFullscreenContainer.setBackgroundColor(Color.BLACK);
-                    youtubeFullscreenContainer.addView(view, new FrameLayout.LayoutParams(-1, -1));
-                    ((FrameLayout)getWindow().getDecorView()).addView(youtubeFullscreenContainer, new FrameLayout.LayoutParams(-1, -1));
-                    root.setVisibility(View.GONE);
-                    youtubeNativeFullscreen = true;
-                    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
-                    getWindow().getDecorView().setSystemUiVisibility(fullscreenSystemUiFlags());
-                }
-
-                @Override public void onHideCustomView() { exitYoutubeNativeFullscreen(); }
-            });
+            webView = new WebView(this);
+            configureCourseWebView(webView);
             mediaFrame.addView(webView, new FrameLayout.LayoutParams(-1,-1));
             String videoId = YoutubeLink.isVideoId(card.youtubeId) ? card.youtubeId : "";
             String playlistId = YoutubeLink.isPlaylistId(card.youtubePlaylistId) ? card.youtubePlaylistId : "";
@@ -269,11 +273,10 @@ public class StudyActivity extends LocalizedActivity {
                     "</body></html>";
             webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
         } else if (CourseLink.isValidHttpUrl(card.resourceUrl)) {
-            TextView openLink = Ui.text(this, getString(R.string.open_course_link), 16, Ui.WHITE, true);
-            openLink.setGravity(Gravity.CENTER);
-            openLink.setBackground(Ui.shape(Ui.SURFACE2, Ui.BLUE, 14, this));
-            openLink.setOnClickListener(v -> CourseLink.open(StudyActivity.this, card.resourceUrl));
-            mediaFrame.addView(openLink, new FrameLayout.LayoutParams(-1, -1));
+            webView = new WebView(this);
+            configureCourseWebView(webView);
+            mediaFrame.addView(webView, new FrameLayout.LayoutParams(-1, -1));
+            webView.loadUrl(card.resourceUrl);
         } else showMediaError(mediaFrame, getString(R.string.video_source_invalid));
 
         if (videoView != null) addPlayerControls();
@@ -296,8 +299,55 @@ public class StudyActivity extends LocalizedActivity {
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,44)); noteLp.topMargin = Ui.dp(this,7); body.addView(note, noteLp);
         root.addView(body, new LinearLayout.LayoutParams(-1,0,1));
         stopButton = Ui.text(this, getString(R.string.end_session), 14, Ui.MUTED, true); stopButton.setGravity(Gravity.CENTER); stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48)); slp.setMargins(Ui.dp(this,22),0,Ui.dp(this,22),Ui.dp(this,18)); root.addView(stopButton, slp); stopButton.setOnClickListener(v -> closeSession());
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48)); slp.setMargins(Ui.dp(this,22),0,Ui.dp(this,22),Ui.dp(this,18)); root.addView(stopButton, slp); stopButton.setOnClickListener(v -> finishOrEndSession());
         setContentView(root); updateTimerUi();
+    }
+
+    private void configureCourseWebView(WebView view) {
+        view.setBackgroundColor(Color.BLACK);
+        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        WebSettings settings = view.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSupportMultipleWindows(false);
+        view.setWebChromeClient(new WebChromeClient() {
+            @Override public void onShowCustomView(View customView, CustomViewCallback callback) {
+                if (youtubeCustomView != null) { callback.onCustomViewHidden(); return; }
+                youtubeCustomView = customView;
+                youtubeCustomViewCallback = callback;
+                youtubeOriginalSystemUiVisibility = getWindow().getDecorView().getSystemUiVisibility();
+                youtubeFullscreenContainer = new FrameLayout(StudyActivity.this);
+                youtubeFullscreenContainer.setBackgroundColor(Color.BLACK);
+                youtubeFullscreenContainer.addView(customView, new FrameLayout.LayoutParams(-1, -1));
+                ((FrameLayout)getWindow().getDecorView()).addView(youtubeFullscreenContainer, new FrameLayout.LayoutParams(-1, -1));
+                root.setVisibility(View.GONE);
+                youtubeNativeFullscreen = true;
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                getWindow().getDecorView().setSystemUiVisibility(fullscreenSystemUiFlags());
+            }
+
+            @Override public void onHideCustomView() { exitYoutubeNativeFullscreen(); }
+        });
+        view.setWebViewClient(new WebViewClient() {
+            @Override public boolean shouldOverrideUrlLoading(WebView webView, String url) {
+                return !CourseLink.isValidHttpUrl(url);
+            }
+
+            @Override public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
+                return !CourseLink.isValidHttpUrl(request.getUrl().toString());
+            }
+
+            @Override public void onReceivedError(WebView webView, WebResourceRequest request,
+                                                  android.webkit.WebResourceError error) {
+                if (request.isForMainFrame() && mediaFrame != null) {
+                    showMediaError(mediaFrame, getString(R.string.web_video_load_error));
+                }
+            }
+        });
     }
 
     private void loadPauseInterstitial() {
@@ -574,7 +624,8 @@ public class StudyActivity extends LocalizedActivity {
     @Override public void onBackPressed() {
         if (youtubeNativeFullscreen) exitYoutubeNativeFullscreen();
         else if (isVideoFullscreen) setVideoFullscreen(false, false);
-        else super.onBackPressed();
+        else if (webView != null && webView.canGoBack()) webView.goBack();
+        else closeSession();
     }
 
     private int fullscreenSystemUiFlags() {
@@ -640,7 +691,34 @@ public class StudyActivity extends LocalizedActivity {
         timeLabel.setText(String.format(Locale.US, "%02d:%02d", remaining / 60, remaining % 60));
         progressBar.setProgress((int)Math.min(100, card.elapsedToday * 100 / Math.max(1, goal)));
         progressLabel.setText(String.format(Locale.US, getString(R.string.session_progress_minutes), Math.min(card.elapsedToday / 60, card.dailyMinutes), card.dailyMinutes));
+        updateFinishAction();
         updateToggle();
+    }
+
+    private void updateFinishAction() {
+        if (stopButton == null || card == null) return;
+        boolean ready = completionReady && !card.doneToday();
+        if (ready == finishActionReady) return;
+        finishActionReady = ready;
+        if (completionPulse != null) {
+            completionPulse.cancel();
+            completionPulse = null;
+            stopButton.setAlpha(1f);
+        }
+        if (ready) {
+            stopButton.setText(getString(R.string.finish_task));
+            stopButton.setTextColor(Color.WHITE);
+            stopButton.setBackground(Ui.shape(Ui.BLUE, Color.rgb(116, 177, 255), 14, this));
+            completionPulse = ObjectAnimator.ofFloat(stopButton, "alpha", 1f, 0.58f);
+            completionPulse.setDuration(650);
+            completionPulse.setRepeatMode(ValueAnimator.REVERSE);
+            completionPulse.setRepeatCount(ValueAnimator.INFINITE);
+            completionPulse.start();
+        } else {
+            stopButton.setText(getString(R.string.end_session));
+            stopButton.setTextColor(Ui.MUTED);
+            stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
+        }
     }
 
     private void markCompleted(StudyCard c) {
@@ -650,13 +728,15 @@ public class StudyActivity extends LocalizedActivity {
         c.streak = yesterday.equals(c.completedDate) ? c.streak + 1 : 1;
         c.completedDate = today;
     }
-    private void showCompletedDialog() {
-        new AlertDialog.Builder(this).setTitle(getString(R.string.session_complete_title))
-                .setMessage(getString(R.string.study_completed_message, card.dailyMinutes, card.name))
-                .setCancelable(false)
-                .setNegativeButton(getString(R.string.continue_studying), (d,w) -> { d.dismiss(); })
-                .setPositiveButton(getString(R.string.end_session), (d,w) -> { d.dismiss(); closeSession(); })
-                .show();
+    private void finishOrEndSession() {
+        if (sessionClosing || card == null) return;
+        if (completionReady && card.elapsedToday >= card.dailyMinutes * 60L && !card.doneToday()) {
+            markCompleted(card);
+            completedThisSession = true;
+            completionReady = false;
+            save();
+        }
+        closeSession();
     }
     private void save() {
         ArrayList<StudyCard> all = StudyStore.load(this);
@@ -664,9 +744,13 @@ public class StudyActivity extends LocalizedActivity {
         StudyStore.save(this, all);
     }
     private void closeSession() {
+        if (sessionClosing) return;
+        sessionClosing = true;
         if (card == null) { finish(); return; }
         if (videoView != null) { try { if (videoView.isPlaying()) card.positionSeconds = videoView.getCurrentPosition()/1000L; videoView.setUserPauseCallback(null); videoView.pause(); } catch (Exception ignored) {} }
         save();
+        if (card.doneToday()) AlarmScheduler.cancelIncompleteReminder(this, card);
+        else AlarmScheduler.scheduleIncompleteReminder(this, card);
         Intent result = new Intent().putExtra("session_completed_today", completedThisSession || card.doneToday());
         setResult(RESULT_OK, result); finish();
     }
@@ -682,6 +766,7 @@ public class StudyActivity extends LocalizedActivity {
     @Override protected void onResume() { super.onResume(); activityResumed = true; if (webView != null) webView.onResume(); if (adsInitialized) loadPauseInterstitial(); }
     @Override protected void onDestroy() {
         handler.removeCallbacks(ticker); handler.removeCallbacks(longPressRunnable); handler.removeCallbacks(hideGestureIndicator); cancelPauseInterstitialRetry();
+        if (completionPulse != null) { completionPulse.cancel(); completionPulse = null; }
         if (youtubeNativeFullscreen) exitYoutubeNativeFullscreen();
         if (isVideoFullscreen) {
             getWindow().getDecorView().setSystemUiVisibility(originalSystemUiVisibility);

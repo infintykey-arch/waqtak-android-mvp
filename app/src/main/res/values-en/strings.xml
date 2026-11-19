@@ -60,7 +60,7 @@
     <string name="local_file">Device file</string>
     <string name="resource_url">Link</string>
     <string name="resource_url_example">https://example.com/course</string>
-    <string name="resource_url_help">Use any public HTTP or HTTPS link. YouTube links still play in the app; other links open in the browser or matching app.</string>
+    <string name="resource_url_help">Use any public HTTP or HTTPS link. It will appear in the app when the site allows it; some sites block embedded playback.</string>
     <string name="video_file">Video file</string>
     <string name="choose_local_video">Tap to choose a video from your device</string>
     <string name="repeat_days">Reminder days</string>
@@ -91,8 +91,10 @@
     <string name="video_source_invalid">This course has no valid video source.</string>
     <string name="session_time_remaining">Time remaining in today’s session</string>
     <string name="pause_time_tracking">Ⅱ   Pause time tracking</string>
-    <string name="auto_save_note">You can pause the timer without stopping the video. Your progress is saved automatically.</string>
+    <string name="auto_save_note">Pause time tracking anytime. If you end before the target, a reminder returns in 5 minutes.</string>
     <string name="end_session">End session</string>
+    <string name="finish_task">Finish task ✓</string>
+    <string name="web_video_load_error">Could not load the page. The site may block playback inside the app.</string>
     <string name="video_remaining_default">Remaining −—:—</string>
     <string name="toggle_video_time_description">Tap to switch between remaining and watched video time</string>
     <string name="speed_button_suffix"> speed</string>
