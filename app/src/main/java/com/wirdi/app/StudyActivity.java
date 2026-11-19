@@ -16,6 +16,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.provider.Settings;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -25,11 +26,14 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.widget.VideoView;
 
 import com.google.android.gms.ads.AdError;
@@ -111,6 +115,8 @@ public class StudyActivity extends LocalizedActivity {
     private boolean localReady = false;
     private boolean isVideoFullscreen = false;
     private boolean youtubeNativeFullscreen = false;
+    private boolean youtubeEmbedded = false;
+    private boolean suppressNextPauseInterstitial = false;
     private boolean forceLandscapeForFullscreen = false;
     private boolean showVideoRemaining = true;
     private boolean longPressPending = false;
@@ -132,6 +138,7 @@ public class StudyActivity extends LocalizedActivity {
     private double videoDurationSeconds = 0;
 
     private TextView timeLabel, toggleLabel, progressLabel, videoTimeLabel, fullscreenButton, speedButton, speedIndicator, gestureIndicator;
+    private TextView addNoteButton;
     private ProgressBar progressBar;
     private LinearLayout root, header, body, playerControls;
     private TextView stopButton;
@@ -238,7 +245,11 @@ public class StudyActivity extends LocalizedActivity {
         if ("local".equals(card.sourceType) && card.localUri != null && !card.localUri.isEmpty()) {
             videoView = new FitVideoView(this); mediaFrame.addView(videoView, new FrameLayout.LayoutParams(-1,-1, Gravity.CENTER));
             videoView.setOnTouchListener(this::handlePlayerTouch);
-            videoView.setUserPauseCallback(() -> { if (activityResumed && !isFinishing() && !isDestroyed()) showPauseInterstitialIfEligible(); });
+            videoView.setUserPauseCallback(() -> {
+                boolean suppressAd = suppressNextPauseInterstitial;
+                suppressNextPauseInterstitial = false;
+                if (!suppressAd && activityResumed && !isFinishing() && !isDestroyed()) showPauseInterstitialIfEligible();
+            });
             try {
                 videoView.setVideoURI(Uri.parse(card.localUri));
                 localMediaController = new MediaController(this); localMediaController.setAnchorView(videoView); videoView.setMediaController(localMediaController);
@@ -254,6 +265,7 @@ public class StudyActivity extends LocalizedActivity {
                 videoView.setOnErrorListener((mp, what, extra) -> { localReady = false; return false; });
             } catch (Exception e) { showMediaError(mediaFrame, getString(R.string.video_open_error)); }
         } else if (YoutubeLink.isVideoId(card.youtubeId) || YoutubeLink.isPlaylistId(card.youtubePlaylistId)) {
+            youtubeEmbedded = true;
             webView = new WebView(this);
             configureCourseWebView(webView);
             mediaFrame.addView(webView, new FrameLayout.LayoutParams(-1,-1));
@@ -261,11 +273,11 @@ public class StudyActivity extends LocalizedActivity {
             String playlistId = YoutubeLink.isPlaylistId(card.youtubePlaylistId) ? card.youtubePlaylistId : "";
             String embedUrl;
             if (!playlistId.isEmpty() && !videoId.isEmpty()) {
-                embedUrl = "https://www.youtube.com/embed/" + videoId + "?list=" + Uri.encode(playlistId) + "&autoplay=1&playsinline=1&rel=0";
+                embedUrl = "https://www.youtube.com/embed/" + videoId + "?list=" + Uri.encode(playlistId) + "&autoplay=1&playsinline=1&rel=0&enablejsapi=1";
             } else if (!playlistId.isEmpty()) {
-                embedUrl = "https://www.youtube.com/embed/videoseries?list=" + Uri.encode(playlistId) + "&autoplay=1&playsinline=1&rel=0";
+                embedUrl = "https://www.youtube.com/embed/videoseries?list=" + Uri.encode(playlistId) + "&autoplay=1&playsinline=1&rel=0&enablejsapi=1";
             } else {
-                embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&start=" + card.positionSeconds + "&playsinline=1&rel=0";
+                embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&start=" + card.positionSeconds + "&playsinline=1&rel=0&enablejsapi=1";
             }
             String appOrigin = "https://" + getPackageName();
             embedUrl += "&origin=" + Uri.encode(appOrigin) + "&controls=1";
@@ -292,10 +304,19 @@ public class StudyActivity extends LocalizedActivity {
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-1, Ui.dp(this,7)); plp.topMargin = Ui.dp(this,8); plp.bottomMargin = Ui.dp(this,8); body.addView(progressBar, plp);
         progressLabel = Ui.text(this, "", 12, Ui.MUTED, false); progressLabel.setGravity(Gravity.CENTER);
         body.addView(progressLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,28)));
+        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,50)); actionLp.topMargin = Ui.dp(this,12);
         TextView toggle = Ui.text(this, getString(R.string.pause_time_tracking), 14, Ui.SILVER, true); toggle.setGravity(Gravity.CENTER);
         toggle.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 24, this));
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-1, Ui.dp(this,50)); tlp.topMargin = Ui.dp(this,12); body.addView(toggle, tlp);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, Ui.dp(this,50), 1); actions.addView(toggle, tlp);
         toggleLabel = toggle; toggle.setOnClickListener(v -> toggleTracking());
+        addNoteButton = Ui.text(this, "+", 29, Ui.BLUE, true); addNoteButton.setGravity(Gravity.CENTER);
+        addNoteButton.setBackground(Ui.shape(Ui.SURFACE2, Ui.BLUE, 18, this));
+        addNoteButton.setContentDescription(getString(R.string.open_course_notes));
+        LinearLayout.LayoutParams noteButtonLp = new LinearLayout.LayoutParams(Ui.dp(this,50), Ui.dp(this,50));
+        noteButtonLp.setMarginStart(Ui.dp(this,9)); actions.addView(addNoteButton, noteButtonLp);
+        addNoteButton.setOnClickListener(v -> { pauseVideoForNotes(); showNotesDialog(); });
+        body.addView(actions, actionLp);
         TextView note = Ui.text(this, getString(R.string.auto_save_note), 12, Ui.MUTED, false); note.setGravity(Gravity.CENTER); note.setMaxLines(2);
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,44)); noteLp.topMargin = Ui.dp(this,7); body.addView(note, noteLp);
         root.addView(body, new LinearLayout.LayoutParams(-1,0,1));
@@ -675,9 +696,123 @@ public class StudyActivity extends LocalizedActivity {
         if ("local".equals(card.sourceType) && localReady && videoView != null) {
             if (videoView.isPlaying()) videoView.pause(); else videoView.start();
             paused = !videoView.isPlaying();
-        } else paused = !paused;
+        } else {
+            paused = !paused;
+            if (youtubeEmbedded) sendYoutubeCommand(paused ? "pauseVideo" : "playVideo");
+        }
         updateToggle();
     }
+
+    private void pauseVideoForNotes() {
+        paused = true;
+        if ("local".equals(card.sourceType) && localReady && videoView != null && videoView.isPlaying()) {
+            suppressNextPauseInterstitial = true;
+            videoView.pause();
+            try { card.positionSeconds = Math.max(0, videoView.getCurrentPosition() / 1000L); } catch (Exception ignored) { }
+        } else if (youtubeEmbedded) {
+            sendYoutubeCommand("pauseVideo");
+        }
+        updateToggle();
+    }
+
+    private void sendYoutubeCommand(String command) {
+        if (webView == null || !youtubeEmbedded) return;
+        String script = "(function(){var f=document.getElementById('ytframe');if(f&&f.contentWindow){f.contentWindow.postMessage(JSON.stringify({event:'command',func:'"
+                + command + "',args:[]}), '*');}})();";
+        webView.evaluateJavascript(script, null);
+    }
+
+    private void showNotesDialog() {
+        if (card == null || isFinishing() || isDestroyed()) return;
+        ArrayList<CourseNote> notes = CourseNoteStore.load(this, card.id);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(Ui.dp(this, 18), Ui.dp(this, 8), Ui.dp(this, 18), Ui.dp(this, 8));
+        AppLocale.applyLayoutDirection(this, list);
+        if (notes.isEmpty()) {
+            TextView empty = Ui.text(this, getString(R.string.course_notes_empty), 14, Ui.MUTED, false);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, Ui.dp(this, 22), 0, Ui.dp(this, 22));
+            list.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+        } else {
+            for (int i = notes.size() - 1; i >= 0; i--) {
+                CourseNote note = notes.get(i);
+                LinearLayout item = new LinearLayout(this);
+                item.setOrientation(LinearLayout.VERTICAL);
+                item.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 12));
+                item.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
+                TextView title = Ui.text(this,
+                        note.title.trim().isEmpty() ? getString(R.string.untitled_course_note) : note.title,
+                        15, Ui.WHITE, true);
+                item.addView(title, new LinearLayout.LayoutParams(-1, -2));
+                TextView text = Ui.text(this, note.text, 14, Ui.SILVER, false);
+                text.setPadding(0, Ui.dp(this, 5), 0, 0);
+                item.addView(text, new LinearLayout.LayoutParams(-1, -2));
+                LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
+                itemLp.bottomMargin = Ui.dp(this, 9);
+                list.addView(item, itemLp);
+            }
+        }
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.course_notes_title))
+                .setView(scroll)
+                .setPositiveButton(getString(R.string.add_course_note), (d, which) -> showNoteEditor())
+                .setNegativeButton(getString(R.string.cancel), null)
+                .create();
+        dialog.show();
+    }
+
+    private void showNoteEditor() {
+        if (card == null || isFinishing() || isDestroyed()) return;
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(Ui.dp(this, 20), Ui.dp(this, 8), Ui.dp(this, 20), Ui.dp(this, 4));
+        AppLocale.applyLayoutDirection(this, form);
+        EditText title = new EditText(this);
+        title.setSingleLine(true);
+        title.setTextColor(Ui.WHITE);
+        title.setHintTextColor(Ui.MUTED);
+        title.setHint(getString(R.string.course_note_title_optional));
+        title.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        title.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
+        title.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 12, this));
+        form.addView(title, new LinearLayout.LayoutParams(-1, Ui.dp(this, 50)));
+        EditText content = new EditText(this);
+        content.setTextColor(Ui.WHITE);
+        content.setHintTextColor(Ui.MUTED);
+        content.setHint(getString(R.string.course_note_text_hint));
+        content.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        content.setGravity(Gravity.TOP | Gravity.START);
+        content.setMinLines(5);
+        content.setPadding(Ui.dp(this, 12), Ui.dp(this, 11), Ui.dp(this, 12), Ui.dp(this, 11));
+        content.setBackground(Ui.shape(Ui.SURFACE2, Ui.LINE, 12, this));
+        LinearLayout.LayoutParams contentLp = new LinearLayout.LayoutParams(-1, -2);
+        contentLp.topMargin = Ui.dp(this, 10);
+        form.addView(content, contentLp);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.add_course_note))
+                .setView(form)
+                .setPositiveButton(getString(R.string.save_course_note), null)
+                .setNegativeButton(getString(R.string.cancel), null)
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String noteText = content.getText().toString().trim();
+            if (noteText.isEmpty()) {
+                content.setError(getString(R.string.course_note_text_required));
+                content.requestFocus();
+                return;
+            }
+            CourseNoteStore.add(this, new CourseNote(card.id, title.getText().toString().trim(), noteText));
+            dialog.dismiss();
+            Toast.makeText(this, getString(R.string.course_note_saved), Toast.LENGTH_SHORT).show();
+            showNotesDialog();
+        }));
+        dialog.show();
+    }
+
     private void updateToggle() {
         if (toggleLabel != null) {
             boolean actuallyPaused = paused || ("local".equals(card.sourceType) && localReady && videoView != null && !videoView.isPlaying());

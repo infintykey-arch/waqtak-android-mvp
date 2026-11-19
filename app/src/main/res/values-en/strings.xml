@@ -162,4 +162,14 @@
         <item quantity="one">%1$d minute</item>
         <item quantity="other">%1$d minutes</item>
     </plurals>
+    <string name="open_course_notes">Open course notes</string>
+    <string name="course_notes_title">Course notes</string>
+    <string name="course_notes_empty">No notes for this course yet. Add your first note.</string>
+    <string name="untitled_course_note">Untitled</string>
+    <string name="add_course_note">Add note</string>
+    <string name="course_note_title_optional">Title (optional)</string>
+    <string name="course_note_text_hint">Write your note here</string>
+    <string name="save_course_note">Save note</string>
+    <string name="course_note_text_required">Enter the note text</string>
+    <string name="course_note_saved">Note saved on this device</string>
 </resources>

@@ -170,4 +170,14 @@
         <item quantity="many">%1$d دقيقة</item>
         <item quantity="other">%1$d دقيقة</item>
     </plurals>
+    <string name="open_course_notes">فتح ملاحظات الكورس</string>
+    <string name="course_notes_title">ملاحظات الكورس</string>
+    <string name="course_notes_empty">لا توجد ملاحظات لهذا الكورس. أضف أول ملاحظة.</string>
+    <string name="untitled_course_note">بدون عنوان</string>
+    <string name="add_course_note">إضافة ملاحظة</string>
+    <string name="course_note_title_optional">العنوان (اختياري)</string>
+    <string name="course_note_text_hint">اكتب ملاحظتك هنا</string>
+    <string name="save_course_note">حفظ الملاحظة</string>
+    <string name="course_note_text_required">اكتب نص الملاحظة</string>
+    <string name="course_note_saved">تم حفظ الملاحظة على الجهاز</string>
 </resources>
