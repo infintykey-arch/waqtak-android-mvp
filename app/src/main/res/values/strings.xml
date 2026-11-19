@@ -197,4 +197,11 @@
     <string name="save_course_note">حفظ الملاحظة</string>
     <string name="course_note_text_required">اكتب نص الملاحظة</string>
     <string name="course_note_saved">تم حفظ الملاحظة على الجهاز</string>
+    <string name="select_all_course_notes">تحديد كل الملاحظات</string>
+    <string name="select_notes_for_pdf_hint">حدّد الملاحظات التي تريد تضمينها في ملف PDF.</string>
+    <string name="export_selected_notes_pdf">تصدير المحدد إلى PDF</string>
+    <string name="no_course_notes_selected">حدّد ملاحظة واحدة على الأقل.</string>
+    <string name="course_notes_pdf_failed">تعذّر إنشاء ملف PDF.</string>
+    <string name="course_notes_pdf_saved">تم حفظ ملف PDF. اختر تطبيقًا لمشاركته.</string>
+    <string name="share_course_notes_pdf">مشاركة ملاحظات الكورس</string>
 </resources>

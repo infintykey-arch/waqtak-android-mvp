@@ -189,4 +189,11 @@
     <string name="save_course_note">Save note</string>
     <string name="course_note_text_required">Enter the note text</string>
     <string name="course_note_saved">Note saved on this device</string>
+    <string name="select_all_course_notes">Select all notes</string>
+    <string name="select_notes_for_pdf_hint">Select the notes you want to include in the PDF.</string>
+    <string name="export_selected_notes_pdf">Export selected as PDF</string>
+    <string name="no_course_notes_selected">Select at least one note.</string>
+    <string name="course_notes_pdf_failed">Could not create the PDF file.</string>
+    <string name="course_notes_pdf_saved">PDF saved. Choose an app to share it.</string>
+    <string name="share_course_notes_pdf">Share course notes</string>
 </resources>

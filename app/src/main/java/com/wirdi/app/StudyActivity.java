@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -27,6 +29,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
@@ -48,8 +51,11 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 import java.text.SimpleDateFormat;
+import java.io.IOException;
+import java.io.OutputStream;
 
 public class StudyActivity extends LocalizedActivity {
+    private static final int REQ_EXPORT_NOTES_PDF = 7254;
     private static final int TICK_MS = 1000;
     private static final int SAVE_INTERVAL_SECONDS = 10;
     private static final int GESTURE_NONE = 0;
@@ -106,6 +112,7 @@ public class StudyActivity extends LocalizedActivity {
     private Runnable interstitialRetryCallback;
     private String cardId = "";
     private StudyCard card;
+    private ArrayList<CourseNote> pendingPdfNotes = new ArrayList<>();
     private int secondsSinceLastSave = 0;
     private boolean paused = false;
     private boolean adjustingTimerProgress = false;
@@ -759,6 +766,10 @@ public class StudyActivity extends LocalizedActivity {
     private void showNotesDialog() {
         if (card == null || isFinishing() || isDestroyed()) return;
         ArrayList<CourseNote> notes = CourseNoteStore.load(this, card.id);
+        ArrayList<CheckBox> selectors = new ArrayList<>();
+        ArrayList<CourseNote> displayedNotes = new ArrayList<>();
+        final boolean[] updatingSelection = {false};
+        final android.widget.Button[] exportButton = {null};
         LinearLayout list = new LinearLayout(this);
         list.setOrientation(LinearLayout.VERTICAL);
         list.setPadding(Ui.dp(this, 18), Ui.dp(this, 8), Ui.dp(this, 18), Ui.dp(this, 8));
@@ -769,34 +780,136 @@ public class StudyActivity extends LocalizedActivity {
             empty.setPadding(0, Ui.dp(this, 22), 0, Ui.dp(this, 22));
             list.addView(empty, new LinearLayout.LayoutParams(-1, -2));
         } else {
+            CheckBox selectAll = new CheckBox(this);
+            selectAll.setText(getString(R.string.select_all_course_notes));
+            selectAll.setTextColor(Ui.SILVER);
+            selectAll.setTextSize(14);
+            selectAll.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.BLUE));
+            list.addView(selectAll, new LinearLayout.LayoutParams(-1, Ui.dp(this, 48)));
+
+            Runnable refreshSelection = () -> {
+                if (updatingSelection[0]) return;
+                int selectedCount = 0;
+                for (CheckBox selector : selectors) if (selector.isChecked()) selectedCount++;
+                updatingSelection[0] = true;
+                selectAll.setChecked(selectedCount == selectors.size());
+                updatingSelection[0] = false;
+                if (exportButton[0] != null) exportButton[0].setEnabled(selectedCount > 0);
+            };
+            selectAll.setOnCheckedChangeListener((button, checked) -> {
+                if (updatingSelection[0]) return;
+                updatingSelection[0] = true;
+                for (CheckBox selector : selectors) selector.setChecked(checked);
+                updatingSelection[0] = false;
+                refreshSelection.run();
+            });
+
             for (int i = notes.size() - 1; i >= 0; i--) {
                 CourseNote note = notes.get(i);
                 LinearLayout item = new LinearLayout(this);
                 item.setOrientation(LinearLayout.VERTICAL);
                 item.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 12));
                 item.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
-                TextView title = Ui.text(this,
-                        note.title.trim().isEmpty() ? getString(R.string.untitled_course_note) : note.title,
-                        15, Ui.WHITE, true);
-                item.addView(title, new LinearLayout.LayoutParams(-1, -2));
+                CheckBox selector = new CheckBox(this);
+                selector.setText(note.title.trim().isEmpty()
+                        ? getString(R.string.untitled_course_note) : note.title);
+                selector.setTextColor(Ui.WHITE);
+                selector.setTextSize(15);
+                selector.setTypeface(null, android.graphics.Typeface.BOLD);
+                selector.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.BLUE));
+                selector.setMinHeight(Ui.dp(this, 42));
+                selectors.add(selector);
+                displayedNotes.add(note);
+                selector.setOnCheckedChangeListener((button, checked) -> refreshSelection.run());
+                item.addView(selector, new LinearLayout.LayoutParams(-1, -2));
                 TextView text = Ui.text(this, note.text, 14, Ui.SILVER, false);
                 text.setPadding(0, Ui.dp(this, 5), 0, 0);
                 item.addView(text, new LinearLayout.LayoutParams(-1, -2));
+                item.setOnClickListener(v -> selector.setChecked(!selector.isChecked()));
                 LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
                 itemLp.bottomMargin = Ui.dp(this, 9);
                 list.addView(item, itemLp);
             }
+            TextView selectionHint = Ui.text(this, getString(R.string.select_notes_for_pdf_hint), 12, Ui.MUTED, false);
+            selectionHint.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 7));
+            list.addView(selectionHint, new LinearLayout.LayoutParams(-1, -2));
         }
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         scroll.addView(list, new ScrollView.LayoutParams(-1, -2));
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
                 .setTitle(getString(R.string.course_notes_title))
                 .setView(scroll)
                 .setPositiveButton(getString(R.string.add_course_note), (d, which) -> showNoteEditor())
-                .setNegativeButton(getString(R.string.cancel), null)
-                .create();
+                .setNegativeButton(getString(R.string.cancel), null);
+        if (!notes.isEmpty()) builder.setNeutralButton(getString(R.string.export_selected_notes_pdf), null);
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> {
+            if (notes.isEmpty()) return;
+            exportButton[0] = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+            exportButton[0].setEnabled(false);
+            exportButton[0].setOnClickListener(v -> {
+                ArrayList<CourseNote> selected = new ArrayList<>();
+                for (int i = 0; i < selectors.size(); i++) {
+                    if (selectors.get(i).isChecked()) selected.add(displayedNotes.get(i));
+                }
+                if (selected.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.no_course_notes_selected), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                dialog.dismiss();
+                createNotesPdf(selected);
+            });
+        });
         dialog.show();
+    }
+
+    private void createNotesPdf(ArrayList<CourseNote> notes) {
+        pendingPdfNotes = new ArrayList<>(notes);
+        String baseName = card == null ? "course-notes" : card.name.trim();
+        if (baseName.isEmpty()) baseName = "course-notes";
+        baseName = baseName.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        Intent create = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        create.addCategory(Intent.CATEGORY_OPENABLE);
+        create.setType("application/pdf");
+        create.putExtra(Intent.EXTRA_TITLE, baseName + ".pdf");
+        try {
+            startActivityForResult(create, REQ_EXPORT_NOTES_PDF);
+        } catch (ActivityNotFoundException error) {
+            pendingPdfNotes.clear();
+            Toast.makeText(this, getString(R.string.course_notes_pdf_failed), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_EXPORT_NOTES_PDF) return;
+
+        ArrayList<CourseNote> notes = pendingPdfNotes;
+        pendingPdfNotes = new ArrayList<>();
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null || notes.isEmpty()) return;
+
+        Uri pdfUri = data.getData();
+        try (OutputStream output = getContentResolver().openOutputStream(pdfUri, "w")) {
+            if (output == null) throw new IOException("Unable to open the selected PDF destination");
+            CourseNotesPdfExporter.write(output, card == null ? "" : card.name,
+                    getString(R.string.course_notes_title), getString(R.string.untitled_course_note), notes);
+        } catch (Exception error) {
+            Toast.makeText(this, getString(R.string.course_notes_pdf_failed), Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        Toast.makeText(this, getString(R.string.course_notes_pdf_saved), Toast.LENGTH_SHORT).show();
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("application/pdf");
+        share.putExtra(Intent.EXTRA_STREAM, pdfUri);
+        share.setClipData(ClipData.newUri(getContentResolver(), getString(R.string.course_notes_title), pdfUri));
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(share, getString(R.string.share_course_notes_pdf)));
+        } catch (ActivityNotFoundException ignored) {
+            // The file has already been saved to the location selected by the user.
+        }
     }
 
     private void showNoteEditor() {
