@@ -116,6 +116,16 @@
     <string name="color_silver">Silver</string>
     <string name="color_turquoise">Turquoise</string>
     <string name="color_purple">Purple</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_coral">Coral</string>
+    <string name="color_green">Green</string>
+    <string name="color_mint">Mint</string>
+    <string name="color_rose">Rose</string>
+    <string name="color_lavender">Lavender</string>
+    <string name="color_gold">Gold</string>
+    <string name="card_color_option">Card color: %1$s</string>
+    <string name="start_course_for">Start %1$s</string>
+    <string name="card_more_options">More options for %1$s</string>
     <string name="default_alarm_name">Your daily reminder</string>
     <string name="alarm_screen_title">It is time to study</string>
     <string name="incomplete_reminder_title">Continue your course?</string>

@@ -34,7 +34,10 @@ public class StudyCard {
     public long autoReminderAtMillis = 0;
     public String autoReminderDate = "";
 
-    public static final String[] COLORS = {"#438BFF", "#77B9FF", "#AAB8C8", "#47C4C0", "#8E8EFF"};
+    public static final String[] COLORS = {
+            "#438BFF", "#77B9FF", "#AAB8C8", "#47C4C0", "#8E8EFF",
+            "#F39B47", "#EB6D6D", "#79B84A", "#3BB69B", "#D55F99", "#B179D1", "#D4AF37"
+    };
 
     public static String today() {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());

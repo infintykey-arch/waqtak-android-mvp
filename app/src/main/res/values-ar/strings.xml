@@ -116,6 +116,16 @@
     <string name="color_silver">فضي</string>
     <string name="color_turquoise">فيروزي</string>
     <string name="color_purple">بنفسجي</string>
+    <string name="color_orange">برتقالي</string>
+    <string name="color_coral">مرجاني</string>
+    <string name="color_green">أخضر</string>
+    <string name="color_mint">نعناعي</string>
+    <string name="color_rose">وردي</string>
+    <string name="color_lavender">لافندر</string>
+    <string name="color_gold">ذهبي</string>
+    <string name="card_color_option">لون البطاقة: %1$s</string>
+    <string name="start_course_for">ابدأ جلسة %1$s</string>
+    <string name="card_more_options">خيارات %1$s</string>
     <string name="default_alarm_name">موعدك اليومي</string>
     <string name="alarm_screen_title">حان وقت جلسة المذاكرة</string>
     <string name="incomplete_reminder_title">متابعة الكورس؟</string>

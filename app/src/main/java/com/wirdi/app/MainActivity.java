@@ -6,10 +6,12 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.TimePickerDialog;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -25,6 +27,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -67,6 +70,7 @@ public class MainActivity extends LocalizedActivity {
     private static final int REQ_RINGTONE = 707;
     private static final int[] WEEKDAY_SHORT = {R.string.weekday_sun_short, R.string.weekday_mon_short, R.string.weekday_tue_short, R.string.weekday_wed_short, R.string.weekday_thu_short, R.string.weekday_fri_short, R.string.weekday_sat_short};
     private static final int[] WEEKDAY_FULL = {R.string.weekday_sun, R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed, R.string.weekday_thu, R.string.weekday_fri, R.string.weekday_sat};
+    private static final int[] CARD_COLOR_NAMES = {R.string.color_blue, R.string.color_sky_blue, R.string.color_silver, R.string.color_turquoise, R.string.color_purple, R.string.color_orange, R.string.color_coral, R.string.color_green, R.string.color_mint, R.string.color_rose, R.string.color_lavender, R.string.color_gold};
 
     private ArrayList<StudyCard> cards = new ArrayList<>();
     private LinearLayout content, grid;
@@ -369,30 +373,38 @@ public class MainActivity extends LocalizedActivity {
     private void addRow(LinearLayout row){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.bottomMargin=Ui.dp(this,9);grid.addView(row,p);}
 
     private View createCardTile(StudyCard c) {
-        FrameLayout outer=new FrameLayout(this); outer.setTag(c.id); int accent=Color.parseColor(StudyCard.COLORS[c.colorIndex]);
-        outer.setBackground(Ui.gradient(Color.rgb(20,29,42),Color.rgb(13,19,29),Ui.LINE,18,this)); outer.setClipToOutline(true);
+        FrameLayout outer=new FrameLayout(this); outer.setTag(c.id);
+        int colorIndex=Math.max(0,Math.min(StudyCard.COLORS.length-1,c.colorIndex));
+        int accent=Color.parseColor(StudyCard.COLORS[colorIndex]);
+        GradientDrawable cardFill=Ui.gradient(shadeColor(accent,.62f),shadeColor(accent,.40f),Color.argb(105,255,255,255),18,this);
+        outer.setBackground(new RippleDrawable(ColorStateList.valueOf(Color.argb(42,255,255,255)),cardFill,Ui.shape(Color.WHITE,Color.TRANSPARENT,18,this)));
+        outer.setClipToOutline(true); outer.setFocusable(true); outer.setContentDescription(getString(R.string.start_course_for,c.name));
         LinearLayout column=new LinearLayout(this); column.setOrientation(LinearLayout.VERTICAL); column.setPadding(Ui.dp(this,10),Ui.dp(this,9),Ui.dp(this,10),Ui.dp(this,9));
         outer.addView(column,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout top=new LinearLayout(this);top.setGravity(Gravity.CENTER_VERTICAL);
         TextView mark=Ui.text(this,"◆",12,accent,true);mark.setGravity(Gravity.CENTER);top.addView(mark,new LinearLayout.LayoutParams(Ui.dp(this,23),Ui.dp(this,24)));
-        TextView more=Ui.text(this,"⋮",22,Ui.MUTED,true);more.setGravity(Gravity.CENTER);top.addView(more,new LinearLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,28)));
+        TextView more=Ui.text(this,"⋮",22,Ui.WHITE,true);more.setGravity(Gravity.CENTER);more.setContentDescription(getString(R.string.card_more_options,c.name));top.addView(more,new LinearLayout.LayoutParams(Ui.dp(this,30),Ui.dp(this,28)));
         LinearLayout.LayoutParams topText=new LinearLayout.LayoutParams(0,Ui.dp(this,27),1);topText.setMarginEnd(Ui.dp(this,5));
-        TextView mini=Ui.text(this,c.weekdaysMask==StudyCard.ALL_WEEKDAYS?getString(R.string.all_days):getString(R.string.selected_days),10,Ui.MUTED,false);top.addView(mini,topText);
+        TextView mini=Ui.text(this,c.weekdaysMask==StudyCard.ALL_WEEKDAYS?getString(R.string.all_days):getString(R.string.selected_days),10,Ui.SILVER,false);top.addView(mini,topText);
         column.addView(top); more.setOnClickListener(v->showCardMenu(v,c));
         TextView name=Ui.text(this,c.name,14,Ui.WHITE,true); name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams nlp=new LinearLayout.LayoutParams(-1,0,1);nlp.topMargin=Ui.dp(this,3);column.addView(name,nlp);
         LinearLayout chips=new LinearLayout(this);chips.setGravity(Gravity.CENTER_VERTICAL);chips.setOrientation(LinearLayout.HORIZONTAL);
         TextView time=Ui.text(this,fmtTime(c.scheduledTime),10,Ui.SILVER,true);time.setGravity(Gravity.CENTER);time.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,22,this));time.setPadding(Ui.dp(this,7),0,Ui.dp(this,7),0);
         chips.addView(time,new LinearLayout.LayoutParams(-2,Ui.dp(this,23)));
-        TextView mins=Ui.text(this,getString(R.string.minutes_abbreviation,c.dailyMinutes),10,Ui.MUTED,false);mins.setGravity(Gravity.CENTER);
+        TextView mins=Ui.text(this,getString(R.string.minutes_abbreviation,c.dailyMinutes),10,Ui.SILVER,false);mins.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(-2,Ui.dp(this,23));mlp.setMarginEnd(Ui.dp(this,5));chips.addView(mins,mlp);
         if(c.doneToday()){TextView done=Ui.text(this,"✓",10,Ui.GREEN,true);done.setGravity(Gravity.CENTER);done.setBackground(Ui.shape(Color.rgb(13,48,41),Color.TRANSPARENT,20,this));chips.addView(done,new LinearLayout.LayoutParams(Ui.dp(this,24),Ui.dp(this,23)));}
         column.addView(chips);
-        ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setTag("card-progress");progress.setMax(100);progress.setProgressTintList(android.content.res.ColorStateList.valueOf(accent));progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE2));
+        ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);progress.setTag("card-progress");progress.setMax(100);progress.setProgressTintList(ColorStateList.valueOf(accent));progress.setProgressBackgroundTintList(ColorStateList.valueOf(shadeColor(accent,.27f)));
         progress.setProgress((int)Math.min(100,c.elapsedToday*100/Math.max(1,c.dailyMinutes*60L)));LinearLayout.LayoutParams prp=new LinearLayout.LayoutParams(-1,Ui.dp(this,4));prp.topMargin=Ui.dp(this,7);column.addView(progress,prp);
-        TextView start=Ui.text(this,c.doneToday()?getString(R.string.resume_course):getString(R.string.start_course),11,Color.WHITE,true);start.setTag("card-start");start.setGravity(Gravity.CENTER);start.setBackground(Ui.shape(accent,Color.TRANSPARENT,18,this));
-        LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,Ui.dp(this,32));stp.topMargin=Ui.dp(this,7);column.addView(start,stp);start.setOnClickListener(v->openStudy(c));
-        outer.setOnClickListener(v->showForm(c)); return outer;
+        TextView start=Ui.text(this,c.doneToday()?getString(R.string.resume_course):getString(R.string.start_course),11,Color.WHITE,true);start.setTag("card-start");start.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams stp=new LinearLayout.LayoutParams(-1,Ui.dp(this,29));stp.topMargin=Ui.dp(this,7);column.addView(start,stp);
+        outer.setOnClickListener(v->openStudy(c)); return outer;
+    }
+
+    private int shadeColor(int color,float factor) {
+        return Color.rgb(Math.round(Color.red(color)*factor),Math.round(Color.green(color)*factor),Math.round(Color.blue(color)*factor));
     }
 
     private void showCardMenu(View anchor,StudyCard card) {
@@ -553,7 +565,7 @@ public class MainActivity extends LocalizedActivity {
         addLabel(panel,getString(R.string.alarm_time));timeLabel=Ui.text(this,fmtTime(formTime)+"   ◷",15,Ui.WHITE,true);timeLabel.setGravity(Gravity.CENTER);timeLabel.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));panel.addView(timeLabel,fieldParams());timeLabel.setOnClickListener(v->showTimePicker());
         TextView timingNotice=Ui.text(this,getString(R.string.alarm_timing_caveat),11,Color.rgb(255,208,138),false);timingNotice.setPadding(Ui.dp(this,10),Ui.dp(this,7),Ui.dp(this,10),Ui.dp(this,7));timingNotice.setBackground(Ui.shape(Color.rgb(43,32,17),Color.rgb(105,74,33),12,this));LinearLayout.LayoutParams timingNoticeLp=new LinearLayout.LayoutParams(-1,-2);timingNoticeLp.topMargin=Ui.dp(this,6);panel.addView(timingNotice,timingNoticeLp);
         addLabel(panel,getString(R.string.daily_study_duration));LinearLayout step=new LinearLayout(this);step.setGravity(Gravity.CENTER);Button minus=Ui.button(this,"−",Ui.SURFACE2,Ui.WHITE);Button plus=Ui.button(this,"+",Ui.SURFACE2,Ui.WHITE);minutesLabel=Ui.text(this,formMinutes+getString(R.string.minute_unit),16,Ui.WHITE,true);minutesLabel.setGravity(Gravity.CENTER);step.addView(minus,new LinearLayout.LayoutParams(Ui.dp(this,55),Ui.dp(this,42)));step.addView(minutesLabel,new LinearLayout.LayoutParams(0,Ui.dp(this,42),1));step.addView(plus,new LinearLayout.LayoutParams(Ui.dp(this,55),Ui.dp(this,42)));panel.addView(step);minus.setOnClickListener(v->{formMinutes=Math.max(5,formMinutes-5);minutesLabel.setText(formMinutes+getString(R.string.minute_unit));});plus.setOnClickListener(v->{formMinutes=Math.min(180,formMinutes+5);minutesLabel.setText(formMinutes+getString(R.string.minute_unit));});
-        addLabel(panel,getString(R.string.card_color));colorOptions=new LinearLayout(this);colorOptions.setGravity(Gravity.CENTER_VERTICAL);for(int i=0;i<StudyCard.COLORS.length;i++)addColorOption(i);panel.addView(colorOptions,new LinearLayout.LayoutParams(-1,Ui.dp(this,42)));
+        addLabel(panel,getString(R.string.card_color));HorizontalScrollView colorScroll=new HorizontalScrollView(this);colorScroll.setHorizontalScrollBarEnabled(false);colorOptions=new LinearLayout(this);colorOptions.setGravity(Gravity.CENTER_VERTICAL);for(int i=0;i<StudyCard.COLORS.length;i++)addColorOption(i);colorScroll.addView(colorOptions,new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.MATCH_PARENT));panel.addView(colorScroll,new LinearLayout.LayoutParams(-1,Ui.dp(this,42)));
         LinearLayout actions=new LinearLayout(this);actions.setOrientation(LinearLayout.HORIZONTAL);LinearLayout.LayoutParams alp=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));alp.topMargin=Ui.dp(this,15);panel.addView(actions,alp);
         Button cancel=Ui.button(this,getString(R.string.cancel),Ui.SURFACE2,Ui.SILVER);Button save=Ui.button(this,getString(R.string.save_course),Ui.BLUE,Color.WHITE);LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,-1,1);ap.setMarginStart(Ui.dp(this,5));actions.addView(cancel,ap);LinearLayout.LayoutParams ap2=new LinearLayout.LayoutParams(0,-1,1);ap2.setMarginEnd(Ui.dp(this,5));actions.addView(save,ap2);cancel.setOnClickListener(v->dialog.dismiss());save.setOnClickListener(v->saveForm(dialog));
         dialog.setContentView(sc);android.view.Window w=dialog.getWindow();if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,Ui.dp(this,590));w.setGravity(Gravity.BOTTOM);w.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);android.view.WindowManager.LayoutParams lp=w.getAttributes();lp.dimAmount=.62f;w.setAttributes(lp);}dialog.show();if(w!=null)w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,Math.min(Ui.dp(this,610),getResources().getDisplayMetrics().heightPixels-Ui.dp(this,60)));
@@ -563,7 +575,7 @@ public class MainActivity extends LocalizedActivity {
     private void addWeekdayOption(int index){TextView day=Ui.text(this,getString(WEEKDAY_SHORT[index]),10,Ui.WHITE,true);day.setGravity(Gravity.CENTER);day.setContentDescription(getString(WEEKDAY_FULL[index]));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,Ui.dp(this,36),1);lp.setMarginStart(Ui.dp(this,2));lp.setMarginEnd(Ui.dp(this,2));weekdayOptions.addView(day,lp);Runnable update=()->{boolean selected=(formWeekdaysMask&(1<<index))!=0;day.setSelected(selected);day.setContentDescription(getString(WEEKDAY_FULL[index])+(selected?getString(R.string.weekday_selected):getString(R.string.weekday_unselected)));day.setTextColor(selected?Color.WHITE:Ui.MUTED);day.setBackground(Ui.shape(selected?Ui.BLUE:Ui.SURFACE2,selected?Ui.BLUE:Ui.LINE,10,this));};update.run();day.setOnClickListener(v->{formWeekdaysMask^=1<<index;update.run();});}
     private EditText edit(String hint,String value,int input){EditText e=new EditText(this);e.setSingleLine(true);e.setText(value);e.setHint(hint);e.setTextSize(14);e.setTextColor(Ui.WHITE);e.setHintTextColor(Ui.MUTED);e.setInputType(input);e.setPadding(Ui.dp(this,13),0,Ui.dp(this,13),0);e.setBackground(Ui.shape(Ui.SURFACE2,Ui.LINE,12,this));return e;}
     private LinearLayout.LayoutParams fieldParams(){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,Ui.dp(this,48));lp.bottomMargin=Ui.dp(this,2);return lp;}
-    private void addColorOption(int index){TextView dot=Ui.text(this,"",10,Ui.WHITE,true);dot.setGravity(Gravity.CENTER);dot.setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[index]),index==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Ui.dp(this,29),Ui.dp(this,29));lp.setMarginStart(Ui.dp(this,8));colorOptions.addView(dot,lp);dot.setOnClickListener(v->{formColor=index;for(int i=0;i<colorOptions.getChildCount();i++)colorOptions.getChildAt(i).setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[i]),i==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));});}
+    private void addColorOption(int index){TextView dot=Ui.text(this,"",10,Ui.WHITE,true);dot.setGravity(Gravity.CENTER);dot.setContentDescription(getString(R.string.card_color_option,getString(CARD_COLOR_NAMES[index])));dot.setSelected(index==formColor);dot.setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[index]),index==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(Ui.dp(this,29),Ui.dp(this,29));lp.setMarginStart(Ui.dp(this,8));colorOptions.addView(dot,lp);dot.setOnClickListener(v->{formColor=index;for(int i=0;i<colorOptions.getChildCount();i++){View option=colorOptions.getChildAt(i);option.setSelected(i==formColor);option.setBackground(Ui.shape(Color.parseColor(StudyCard.COLORS[i]),i==formColor?Ui.WHITE:Color.TRANSPARENT,99,this));}});}
     private void showTimePicker(){String[] t=formTime.split(":");int h=19,m=0;try{h=Integer.parseInt(t[0]);m=Integer.parseInt(t[1]);}catch(Exception ignored){}new TimePickerDialog(this,(view,hour,minute)->{formTime=String.format(Locale.US,"%02d:%02d",hour,minute);timeLabel.setText(fmtTime(formTime)+"   ◷");},h,m,false).show();}
     private void pickVideo(){Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("video/*");try{startActivityForResult(i,REQ_VIDEO);}catch(Exception e){Toast.makeText(this,getString(R.string.local_file_open_error),Toast.LENGTH_SHORT).show();}}
     private String displayName(Uri uri){try(android.database.Cursor c=getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return getString(R.string.choose_video_from_device);}
