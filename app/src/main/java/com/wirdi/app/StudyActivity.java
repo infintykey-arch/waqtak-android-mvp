@@ -33,6 +33,7 @@ import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.MediaController;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -61,6 +62,24 @@ public class StudyActivity extends LocalizedActivity {
     private static final int GESTURE_NONE = 0;
     private static final int GESTURE_VOLUME = 1;
     private static final int GESTURE_BRIGHTNESS = 2;
+    private static final String STATE_EXTRA_CARD_ID = "extra_timer_card_id";
+    private static final String STATE_EXTRA_DATE = "extra_timer_date";
+    private static final String STATE_EXTRA_COUNT = "extra_timer_count";
+    private static final String STATE_EXTRA_REMAINING = "extra_timer_remaining";
+    private static final String STATE_EXTRA_ACTIVE = "extra_timer_active";
+    private static final String STATE_EXTRA_CHOICES = "extra_timer_choices";
+
+    private static final class ExtraTimerUi {
+        final int durationSeconds;
+        final TextView timeLabel;
+        final ProgressBar progressBar;
+
+        ExtraTimerUi(int durationSeconds, TextView timeLabel, ProgressBar progressBar) {
+            this.durationSeconds = durationSeconds;
+            this.timeLabel = timeLabel;
+            this.progressBar = progressBar;
+        }
+    }
 
     private static final class FitVideoView extends VideoView {
         private int sourceWidth;
@@ -120,6 +139,10 @@ public class StudyActivity extends LocalizedActivity {
     private boolean completedThisSession = false;
     private boolean sessionClosing = false;
     private boolean finishActionReady = false;
+    private int extraTimersStarted = 0;
+    private long extraTimerRemainingSeconds = 0;
+    private boolean extraTimerActive = false;
+    private boolean extraTimeChoicesVisible = false;
     private boolean localReady = false;
     private boolean isVideoFullscreen = false;
     private boolean youtubeNativeFullscreen = false;
@@ -148,7 +171,10 @@ public class StudyActivity extends LocalizedActivity {
     private TextView timeLabel, toggleLabel, progressLabel, videoTimeLabel, fullscreenButton, speedButton, speedIndicator, gestureIndicator;
     private TextView addNoteButton;
     private SeekBar timerSeekBar;
-    private LinearLayout root, header, body, playerControls;
+    private LinearLayout root, header, body, playerControls, extraTimersContainer;
+    private ScrollView bodyScroll;
+    private TextView extraTimeButton;
+    private final ArrayList<ExtraTimerUi> extraTimerViews = new ArrayList<>();
     private TextView stopButton;
     private ObjectAnimator completionPulse;
     private FrameLayout mediaFrame;
@@ -186,12 +212,14 @@ public class StudyActivity extends LocalizedActivity {
                 card.maxElapsedToday = 0;
                 card.lastDate = today;
                 completionReady = false;
+                resetExtraTimeState();
                 secondsSinceLastSave = 0;
                 save();
                 updateTimerUi();
             }
-            if (!paused && !completionReady && !card.doneToday() && !adjustingTimerProgress
-                    && (!"local".equals(card.sourceType) || (localReady && videoView != null && videoView.isPlaying()))) {
+            boolean trackingActive = !paused && !adjustingTimerProgress
+                    && (!"local".equals(card.sourceType) || (localReady && videoView != null && videoView.isPlaying()));
+            if (trackingActive && !completionReady && !card.doneToday()) {
                 long goal = card.dailyMinutes * 60L;
                 if (card.elapsedToday < goal) {
                     card.elapsedToday++;
@@ -215,6 +243,15 @@ public class StudyActivity extends LocalizedActivity {
                     save();
                 }
                 updateTimerUi();
+            } else if (trackingActive && completionReady && !card.doneToday() && extraTimerActive
+                    && extraTimerRemainingSeconds > 0) {
+                extraTimerRemainingSeconds--;
+                if (extraTimerRemainingSeconds == 0) {
+                    extraTimerActive = false;
+                    extraTimeChoicesVisible = true;
+                }
+                updateExtraTimersUi();
+                updateExtraTimeChoices();
             }
             handler.postDelayed(this, TICK_MS);
         }
@@ -229,6 +266,16 @@ public class StudyActivity extends LocalizedActivity {
         card.resetForNewDay();
         card.lastDate = StudyCard.today();
         completionReady = !card.doneToday() && card.elapsedToday >= card.dailyMinutes * 60L;
+        if (state != null && card.id.equals(state.getString(STATE_EXTRA_CARD_ID, ""))
+                && StudyCard.today().equals(state.getString(STATE_EXTRA_DATE, ""))) {
+            extraTimersStarted = Math.max(0, state.getInt(STATE_EXTRA_COUNT, 0));
+            extraTimerRemainingSeconds = Math.max(0, state.getLong(STATE_EXTRA_REMAINING, 0));
+            extraTimerActive = state.getBoolean(STATE_EXTRA_ACTIVE, false) && extraTimerRemainingSeconds > 0;
+            extraTimeChoicesVisible = state.getBoolean(STATE_EXTRA_CHOICES, false);
+            if (extraTimersStarted == 0 && completionReady && !extraTimerActive) extraTimeChoicesVisible = true;
+            if (!extraTimerActive && extraTimersStarted > 0 && extraTimerRemainingSeconds == 0)
+                extraTimeChoicesVisible = state.getBoolean(STATE_EXTRA_CHOICES, true);
+        }
         AlarmScheduler.cancelIncompleteReminder(this, card);
         AlarmReceiver.cancelReminderNotification(this, card.id);
         touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
@@ -345,6 +392,20 @@ public class StudyActivity extends LocalizedActivity {
         body.addView(progressLabel, new LinearLayout.LayoutParams(-1, Ui.dp(this,28)));
         TextView progressHint = Ui.text(this, getString(R.string.session_seek_hint), 10, Ui.MUTED, false); progressHint.setGravity(Gravity.CENTER);
         body.addView(progressHint, new LinearLayout.LayoutParams(-1, Ui.dp(this,20)));
+        extraTimersContainer = new LinearLayout(this); extraTimersContainer.setOrientation(LinearLayout.VERTICAL);
+        extraTimersContainer.setVisibility(View.GONE);
+        LinearLayout.LayoutParams extraTimersLp = new LinearLayout.LayoutParams(-1, -2);
+        extraTimersLp.topMargin = Ui.dp(this,8);
+        body.addView(extraTimersContainer, extraTimersLp);
+        extraTimeButton = Ui.text(this, getString(R.string.extra_time), 14, Color.WHITE, true);
+        extraTimeButton.setGravity(Gravity.CENTER);
+        extraTimeButton.setBackground(Ui.shape(Ui.GREEN, Color.rgb(144, 235, 207), 14, this));
+        extraTimeButton.setVisibility(View.GONE);
+        LinearLayout.LayoutParams extraTimeButtonLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48));
+        extraTimeButtonLp.topMargin = Ui.dp(this,8);
+        body.addView(extraTimeButton, extraTimeButtonLp);
+        extraTimeButton.setOnClickListener(v -> startExtraTimer());
+        for (int i = 1; i <= extraTimersStarted; i++) addExtraTimerRow(i, extraTimerDurationMinutes(i));
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams actionLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,50)); actionLp.topMargin = Ui.dp(this,12);
         TextView toggle = Ui.text(this, getString(R.string.pause_time_tracking), 14, Ui.SILVER, true); toggle.setGravity(Gravity.CENTER);
@@ -360,10 +421,14 @@ public class StudyActivity extends LocalizedActivity {
         body.addView(actions, actionLp);
         TextView note = Ui.text(this, getString(R.string.auto_save_note), 12, Ui.MUTED, false); note.setGravity(Gravity.CENTER); note.setMaxLines(2);
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,44)); noteLp.topMargin = Ui.dp(this,7); body.addView(note, noteLp);
-        root.addView(body, new LinearLayout.LayoutParams(-1,0,1));
+        bodyScroll = new ScrollView(this); bodyScroll.setFillViewport(false);
+        bodyScroll.setVerticalScrollBarEnabled(false); bodyScroll.setClipToPadding(false);
+        bodyScroll.addView(body, new ScrollView.LayoutParams(-1,-2));
+        root.addView(bodyScroll, new LinearLayout.LayoutParams(-1,0,1));
         stopButton = Ui.text(this, getString(R.string.end_session), 14, Ui.MUTED, true); stopButton.setGravity(Gravity.CENTER); stopButton.setBackground(Ui.shape(Ui.SURFACE, Ui.LINE, 14, this));
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, Ui.dp(this,48)); slp.setMargins(Ui.dp(this,22),0,Ui.dp(this,22),Ui.dp(this,18)); root.addView(stopButton, slp); stopButton.setOnClickListener(v -> finishOrEndSession());
         setContentView(root); updateTimerUi();
+        if (extraTimersStarted > 0) bodyScroll.post(() -> bodyScroll.fullScroll(View.FOCUS_DOWN));
     }
 
     private void configureCourseWebView(WebView view) {
@@ -967,6 +1032,96 @@ public class StudyActivity extends LocalizedActivity {
             toggleLabel.setTextColor(actuallyPaused ? Ui.BLUE : Ui.SILVER);
         }
     }
+
+    private int extraTimerDurationMinutes(int index) { return 5 + (index - 1) * 3; }
+
+    private int extraTimerColor(int index) {
+        float hue = (150f + (index - 1) * 137.508f) % 360f;
+        return Color.HSVToColor(new float[]{hue, 0.58f, 0.95f});
+    }
+
+    private void addExtraTimerRow(int index, int durationMinutes) {
+        if (extraTimersContainer == null) return;
+        int color = extraTimerColor(index);
+        int durationSeconds = durationMinutes * 60;
+        String durationText = getResources().getQuantityString(R.plurals.duration_minutes, durationMinutes, durationMinutes);
+        LinearLayout timerCard = new LinearLayout(this);
+        timerCard.setOrientation(LinearLayout.VERTICAL);
+        timerCard.setPadding(Ui.dp(this,12), Ui.dp(this,8), Ui.dp(this,12), Ui.dp(this,10));
+        timerCard.setBackground(Ui.shape(Ui.SURFACE, color, 14, this));
+        LinearLayout.LayoutParams timerCardLp = new LinearLayout.LayoutParams(-1, -2);
+        timerCardLp.bottomMargin = Ui.dp(this,8);
+        extraTimersContainer.addView(timerCard, timerCardLp);
+
+        LinearLayout timerHeader = new LinearLayout(this);
+        timerHeader.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = Ui.text(this, getString(R.string.extra_timer_label, index, durationText), 13, Ui.SILVER, true);
+        title.setMaxLines(1);
+        TextView remaining = Ui.text(this, "00:00", 18, color, true);
+        remaining.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, Ui.dp(this,30), 1);
+        timerHeader.addView(title, titleLp);
+        LinearLayout.LayoutParams remainingLp = new LinearLayout.LayoutParams(Ui.dp(this,68), Ui.dp(this,30));
+        timerHeader.addView(remaining, remainingLp);
+        timerCard.addView(timerHeader, new LinearLayout.LayoutParams(-1, -2));
+
+        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setIndeterminate(false);
+        progress.setMax(Math.max(1, durationSeconds));
+        progress.setProgress(0);
+        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(color));
+        progress.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(Ui.SURFACE2));
+        LinearLayout.LayoutParams progressLp = new LinearLayout.LayoutParams(-1, Ui.dp(this,8));
+        progressLp.topMargin = Ui.dp(this,4);
+        timerCard.addView(progress, progressLp);
+        extraTimerViews.add(new ExtraTimerUi(durationSeconds, remaining, progress));
+        extraTimersContainer.setVisibility(View.VISIBLE);
+    }
+
+    private void startExtraTimer() {
+        if (card == null || !completionReady || card.doneToday() || extraTimerActive || !extraTimeChoicesVisible) return;
+        int durationMinutes = extraTimerDurationMinutes(extraTimersStarted + 1);
+        extraTimersStarted++;
+        extraTimerRemainingSeconds = durationMinutes * 60L;
+        extraTimerActive = true;
+        extraTimeChoicesVisible = false;
+        addExtraTimerRow(extraTimersStarted, durationMinutes);
+        updateExtraTimersUi();
+        updateExtraTimeChoices();
+        if (bodyScroll != null) bodyScroll.post(() -> bodyScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void updateExtraTimersUi() {
+        for (int i = 0; i < extraTimerViews.size(); i++) {
+            ExtraTimerUi timer = extraTimerViews.get(i);
+            long remaining = i == extraTimersStarted - 1 && extraTimerActive ? extraTimerRemainingSeconds : 0;
+            int boundedRemaining = (int) Math.max(0, Math.min(timer.durationSeconds, remaining));
+            timer.progressBar.setProgress(timer.durationSeconds - boundedRemaining);
+            timer.timeLabel.setText(String.format(Locale.US, "%02d:%02d", boundedRemaining / 60, boundedRemaining % 60));
+        }
+    }
+
+    private void updateExtraTimeChoices() {
+        if (extraTimeButton == null || card == null) return;
+        boolean visible = completionReady && !card.doneToday() && extraTimeChoicesVisible;
+        boolean wasVisible = extraTimeButton.getVisibility() == View.VISIBLE;
+        extraTimeButton.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && !wasVisible && bodyScroll != null)
+            bodyScroll.post(() -> bodyScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void resetExtraTimeState() {
+        extraTimersStarted = 0;
+        extraTimerRemainingSeconds = 0;
+        extraTimerActive = false;
+        extraTimeChoicesVisible = false;
+        extraTimerViews.clear();
+        if (extraTimersContainer != null) {
+            extraTimersContainer.removeAllViews();
+            extraTimersContainer.setVisibility(View.GONE);
+        }
+    }
+
     private void updateTimerUi() {
         if (timeLabel == null) return;
         long goal = card.dailyMinutes * 60L;
@@ -978,6 +1133,9 @@ public class StudyActivity extends LocalizedActivity {
         timerSeekBar.setProgress((int) Math.min(card.elapsedToday, maxReached));
         timerSeekBar.setEnabled(!card.doneToday());
         progressLabel.setText(String.format(Locale.US, getString(R.string.session_progress_minutes), Math.min(card.elapsedToday / 60, card.dailyMinutes), card.dailyMinutes));
+        if (completionReady && extraTimersStarted == 0 && !extraTimerActive) extraTimeChoicesVisible = true;
+        updateExtraTimersUi();
+        updateExtraTimeChoices();
         updateFinishAction();
         updateToggle();
     }
@@ -993,7 +1151,7 @@ public class StudyActivity extends LocalizedActivity {
             stopButton.setAlpha(1f);
         }
         if (ready) {
-            stopButton.setText(getString(R.string.finish_task));
+            stopButton.setText(getString(R.string.end_session));
             stopButton.setTextColor(Color.WHITE);
             stopButton.setBackground(Ui.shape(Ui.BLUE, Color.rgb(116, 177, 255), 14, this));
             completionPulse = ObjectAnimator.ofFloat(stopButton, "alpha", 1f, 0.58f);
@@ -1021,6 +1179,8 @@ public class StudyActivity extends LocalizedActivity {
             markCompleted(card);
             completedThisSession = true;
             completionReady = false;
+            extraTimerActive = false;
+            extraTimeChoicesVisible = false;
             save();
         }
         closeSession();
@@ -1040,6 +1200,17 @@ public class StudyActivity extends LocalizedActivity {
         else AlarmScheduler.scheduleIncompleteReminder(this, card);
         Intent result = new Intent().putExtra("session_completed_today", completedThisSession || card.doneToday());
         setResult(RESULT_OK, result); finish();
+    }
+
+    @Override protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (card == null) return;
+        outState.putString(STATE_EXTRA_CARD_ID, card.id);
+        outState.putString(STATE_EXTRA_DATE, StudyCard.today());
+        outState.putInt(STATE_EXTRA_COUNT, extraTimersStarted);
+        outState.putLong(STATE_EXTRA_REMAINING, extraTimerRemainingSeconds);
+        outState.putBoolean(STATE_EXTRA_ACTIVE, extraTimerActive);
+        outState.putBoolean(STATE_EXTRA_CHOICES, extraTimeChoicesVisible);
     }
 
     @Override protected void onPause() {

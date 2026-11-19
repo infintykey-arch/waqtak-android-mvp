@@ -110,6 +110,8 @@
     <string name="session_progress_minutes">%1$d of %2$d min</string>
     <string name="session_seek_hint">Drag back; you can’t move past the last recorded point</string>
     <string name="session_complete_title">Time is up</string>
+    <string name="extra_time">Extra time</string>
+    <string name="extra_timer_label">Extra timer %1$d · %2$s</string>
     <string name="continue_studying">Continue</string>
     <string name="color_blue">Blue</string>
     <string name="color_sky_blue">Sky blue</string>

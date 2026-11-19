@@ -110,6 +110,8 @@
     <string name="session_progress_minutes">%1$d من %2$d دقيقة</string>
     <string name="session_seek_hint">اسحب للرجوع؛ لا يمكن التقديم بعد آخر نقطة مسجلة</string>
     <string name="session_complete_title">انتهى الوقت المحدد</string>
+    <string name="extra_time">وقت إضافي</string>
+    <string name="extra_timer_label">مؤقت إضافي %1$d · %2$s</string>
     <string name="continue_studying">إكمال</string>
     <string name="color_blue">أزرق</string>
     <string name="color_sky_blue">سماوي</string>
