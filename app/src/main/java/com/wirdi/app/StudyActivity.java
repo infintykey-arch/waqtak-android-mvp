@@ -267,11 +267,12 @@ public class StudyActivity extends LocalizedActivity {
             } else {
                 embedUrl = "https://www.youtube.com/embed/" + videoId + "?autoplay=1&start=" + card.positionSeconds + "&playsinline=1&rel=0";
             }
-            embedUrl += "&controls=1";
+            String appOrigin = "https://" + getPackageName();
+            embedUrl += "&origin=" + Uri.encode(appOrigin) + "&controls=1";
             String html = "<!doctype html><html style='height:100%'><head><meta name='viewport' content='width=device-width,initial-scale=1,user-scalable=no'></head>" +
-                    "<body style='margin:0;background:#000;height:100%'><iframe id='ytframe' style='width:100%;height:100%;border:0' src='" + embedUrl.replace("&", "&amp;") + "' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe>" +
+                    "<body style='margin:0;background:#000;height:100%'><iframe id='ytframe' style='width:100%;height:100%;border:0' src='" + embedUrl.replace("&", "&amp;") + "' referrerpolicy='strict-origin-when-cross-origin' allow='autoplay; encrypted-media; picture-in-picture' allowfullscreen></iframe>" +
                     "</body></html>";
-            webView.loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null);
+            webView.loadDataWithBaseURL(appOrigin + "/", html, "text/html", "UTF-8", null);
         } else if (CourseLink.isValidHttpUrl(card.resourceUrl)) {
             webView = new WebView(this);
             configureCourseWebView(webView);
