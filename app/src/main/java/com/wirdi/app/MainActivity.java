@@ -141,13 +141,16 @@ public class MainActivity extends LocalizedActivity {
         mainArea = new FrameLayout(this); root.addView(mainArea, new LinearLayout.LayoutParams(-1,0,1));
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(Ui.dp(this,16),Ui.dp(this,4),Ui.dp(this,16),Ui.dp(this,94));
+        View bannerSlot = buildBanner();
+        LinearLayout.LayoutParams bannerLp = new LinearLayout.LayoutParams(-1,-2);
+        bannerLp.topMargin = Ui.dp(this,6); bannerLp.bottomMargin = Ui.dp(this,14);
+        content.addView(bannerSlot,bannerLp);
         scroll.addView(content, new ScrollView.LayoutParams(-1,-2));
         mainArea.addView(scroll, new FrameLayout.LayoutParams(-1,-1));
         TextView fab = Ui.text(this,"+",32,Color.WHITE,true); fab.setGravity(Gravity.CENTER); fab.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,new int[]{Ui.BLUE,Color.rgb(34,92,183)}));
         fab.setBackground(Ui.shape(Ui.BLUE, Color.rgb(101,174,255), 99, this)); fab.setElevation(Ui.dp(this,8));
         FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(Ui.dp(this,60),Ui.dp(this,60),Gravity.BOTTOM|Gravity.END);
         flp.setMargins(0,0,Ui.dp(this,22),Ui.dp(this,20)); mainArea.addView(fab,flp); fab.setOnClickListener(v -> showForm(null));
-        root.addView(buildBanner(), new LinearLayout.LayoutParams(-1,-2));
         setContentView(root);
     }
 
@@ -168,8 +171,8 @@ public class MainActivity extends LocalizedActivity {
     }
 
     private View buildBanner() {
-        LinearLayout wrap = new LinearLayout(this); wrap.setOrientation(LinearLayout.VERTICAL); wrap.setGravity(Gravity.CENTER); wrap.setBackgroundColor(Color.rgb(8,12,19));
-        TextView label = Ui.text(this,getString(R.string.ad_label),9,Ui.MUTED,false); label.setGravity(Gravity.CENTER); wrap.addView(label,new LinearLayout.LayoutParams(-1,Ui.dp(this,14)));
+        LinearLayout wrap = new LinearLayout(this); wrap.setOrientation(LinearLayout.VERTICAL); wrap.setGravity(Gravity.CENTER); wrap.setPadding(Ui.dp(this,8),Ui.dp(this,6),Ui.dp(this,8),Ui.dp(this,8)); wrap.setBackground(Ui.gradient(Color.rgb(17,23,33),Color.rgb(11,16,24),Ui.LINE,16,this));
+        TextView label = Ui.text(this,getString(R.string.ad_label),9,Ui.MUTED,false); label.setGravity(Gravity.CENTER); wrap.addView(label,new LinearLayout.LayoutParams(-1,Ui.dp(this,18)));
         banner = new AdView(this); banner.setAdUnitId(getString(R.string.admob_banner_id));
         bannerAdSize = currentAdaptiveBannerSize(); banner.setAdSize(bannerAdSize);
         banner.setAdListener(new AdListener(){
@@ -182,7 +185,7 @@ public class MainActivity extends LocalizedActivity {
 
     private AdSize currentAdaptiveBannerSize() {
         float density=getResources().getDisplayMetrics().density;
-        int widthDp=Math.max(1,(int)(getResources().getDisplayMetrics().widthPixels/density));
+        int widthDp=Math.max(1,(int)(getResources().getDisplayMetrics().widthPixels/density)-48);
         return AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this,widthDp);
     }
 
@@ -332,7 +335,7 @@ public class MainActivity extends LocalizedActivity {
         int generation=renderGeneration;
         if(cards.isEmpty()) {
             TextView empty=Ui.text(this,getString(R.string.empty_courses),14,Ui.MUTED,false); empty.setGravity(Gravity.CENTER); empty.setBackground(Ui.shape(Ui.SURFACE,Ui.LINE,18,this));
-            LinearLayout.LayoutParams elp=new LinearLayout.LayoutParams(-1,Ui.dp(this,120)); grid.addView(empty,elp); addNativeAdSlot(generation); return;
+            LinearLayout.LayoutParams elp=new LinearLayout.LayoutParams(-1,Ui.dp(this,120)); grid.addView(empty,elp); return;
         }
         int widthPx=getResources().getDisplayMetrics().widthPixels-Ui.dp(this,32); int widthDp=(int)(widthPx/getResources().getDisplayMetrics().density);
         columns=widthDp>=780?4:(widthDp>=520?3:2);
@@ -344,21 +347,18 @@ public class MainActivity extends LocalizedActivity {
             int itemWidth=cell*span+gap*(span-1);
             LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(itemWidth,itemWidth); if(rowItems>0) cp.setMarginStart(gap);
             row.addView(createCardTile(c),cp); used+=span; rowItems++;
-            if((i+1)%5==0) {
+            if((i+1)%4==0) {
                 if(rowItems>0){addRow(row);row=newRow();used=0;rowItems=0;}
                 addNativeAdSlot(generation);
             }
         }
         if(rowItems>0)addRow(row);
-        if(cards.size()>0 && cards.size()<5) {
-            addNativeAdSlot(generation);
-        }
     }
 
     private void addNativeAdSlot(int generation) {
         FrameLayout slot=createNativeAdSlot();
-        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,Ui.dp(this,132));
-        slp.topMargin=Ui.dp(this,4); slp.bottomMargin=Ui.dp(this,10);
+        LinearLayout.LayoutParams slp=new LinearLayout.LayoutParams(-1,Ui.dp(this,146));
+        slp.topMargin=Ui.dp(this,12); slp.bottomMargin=Ui.dp(this,14);
         grid.addView(slot,slp); nativeAdSlots.add(slot);
         if(adsInitialized) loadNativeAd(slot,generation);
     }
@@ -526,20 +526,35 @@ public class MainActivity extends LocalizedActivity {
     private void openStudy(StudyCard c){
         if(c==null||openingStudy||isFinishing()||isDestroyed())return;
         openingStudy=true;
-        boolean eligible=AdFrequencyGate.recordUserActionAndShouldShow(this);
-        if(!eligible||interstitial==null||!activityResumed){if(interstitial==null)loadInterstitial();launchStudy(c);return;}
+        launchStudy(c);
+    }
+    private void launchStudy(StudyCard c){openingStudy=false;if(isFinishing()||isDestroyed())return;Intent i=new Intent(this,StudyActivity.class).putExtra(AlarmScheduler.EXTRA_ID,c.id);startActivityForResult(i,REQ_STUDY);}
+    private void showEndSessionInterstitialIfEligible(){
+        if(!AdFrequencyGate.recordUserActionAndShouldShow(this))return;
+        if(interstitial==null||!activityResumed){loadInterstitial();return;}
         InterstitialAd ad=interstitial;interstitial=null;
         ad.setFullScreenContentCallback(new FullScreenContentCallback(){
             @Override public void onAdShowedFullScreenContent(){AdFrequencyGate.markShown(MainActivity.this);}
-            @Override public void onAdDismissedFullScreenContent(){preloadInterstitial();launchStudy(c);}
-            @Override public void onAdFailedToShowFullScreenContent(AdError error){android.util.Log.w("WaqtakAds","Pre-session interstitial failed to show: code="+error.getCode()+", message="+error.getMessage());preloadInterstitial();launchStudy(c);}
+            @Override public void onAdDismissedFullScreenContent(){preloadInterstitial();}
+            @Override public void onAdFailedToShowFullScreenContent(AdError error){android.util.Log.w("WaqtakAds","Post-session interstitial failed to show: code="+error.getCode()+", message="+error.getMessage());preloadInterstitial();}
         });
-        try{ad.show(this);}catch(Exception error){android.util.Log.w("WaqtakAds","Pre-session interstitial exception; continuing without blocking the session.",error);preloadInterstitial();launchStudy(c);}
+        try{ad.show(this);}catch(Exception error){android.util.Log.w("WaqtakAds","Post-session interstitial exception; continuing without blocking home.",error);preloadInterstitial();}
     }
-    private void launchStudy(StudyCard c){openingStudy=false;if(isFinishing()||isDestroyed())return;Intent i=new Intent(this,StudyActivity.class).putExtra(AlarmScheduler.EXTRA_ID,c.id);startActivityForResult(i,REQ_STUDY);}
     private void handleStartIntent(Intent i){if(i==null)return;String id=i.getStringExtra("start_card_id");if(id!=null&&!id.isEmpty()){i.removeExtra("start_card_id");StudyCard c=StudyStore.find(this,id);if(c!=null)mainArea.postDelayed(()->openStudy(c),180);}}
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);handleStartIntent(intent);}
-    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){super.onActivityResult(requestCode,resultCode,data);if(requestCode==REQ_RINGTONE){if(resultCode==RESULT_OK&&data!=null){Uri picked=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);if(picked==null)picked=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);String title=getString(R.string.default_ringtone);try{Ringtone ringtone=RingtoneManager.getRingtone(this,picked);if(ringtone!=null)title=ringtone.getTitle(this);}catch(Exception ignored){}AlarmReceiver.saveSelectedSound(this,picked,title);renderSoundSettings();Toast.makeText(this,getString(R.string.ringtone_changed),Toast.LENGTH_SHORT).show();}return;}if(requestCode==REQ_VIDEO&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){selectedLocalUri=data.getData();try{getContentResolver().takePersistableUriPermission(selectedLocalUri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}selectedLocalName=displayName(selectedLocalUri);if(fileLabel!=null)fileLabel.setText(selectedLocalName);return;}if(requestCode==REQ_STUDY){refreshAfterStudy();preloadInterstitial();}}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==REQ_RINGTONE){
+            if(resultCode==RESULT_OK&&data!=null){Uri picked=data.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI);if(picked==null)picked=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);String title=getString(R.string.default_ringtone);try{Ringtone ringtone=RingtoneManager.getRingtone(this,picked);if(ringtone!=null)title=ringtone.getTitle(this);}catch(Exception ignored){}AlarmReceiver.saveSelectedSound(this,picked,title);renderSoundSettings();Toast.makeText(this,getString(R.string.ringtone_changed),Toast.LENGTH_SHORT).show();}
+            return;
+        }
+        if(requestCode==REQ_VIDEO&&resultCode==RESULT_OK&&data!=null&&data.getData()!=null){selectedLocalUri=data.getData();try{getContentResolver().takePersistableUriPermission(selectedLocalUri,data.getFlags()&Intent.FLAG_GRANT_READ_URI_PERMISSION);}catch(Exception ignored){}selectedLocalName=displayName(selectedLocalUri);if(fileLabel!=null)fileLabel.setText(selectedLocalName);return;}
+        if(requestCode==REQ_STUDY){
+            refreshAfterStudy();
+            if(resultCode==RESULT_OK&&data!=null&&data.getBooleanExtra("session_end_button_pressed",false))showEndSessionInterstitialIfEligible();
+            else preloadInterstitial();
+        }
+    }
     @Override public void onBackPressed(){new AlertDialog.Builder(this).setMessage(getString(R.string.exit_confirmation)).setNegativeButton(getString(R.string.stay),(d,w)->d.dismiss()).setPositiveButton(getString(R.string.exit),(d,w)->finish()).show();}
 
     private void showForm(StudyCard existing) {

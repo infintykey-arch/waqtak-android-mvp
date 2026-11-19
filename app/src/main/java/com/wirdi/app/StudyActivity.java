@@ -138,6 +138,7 @@ public class StudyActivity extends LocalizedActivity {
     private boolean completionReady = false;
     private boolean completedThisSession = false;
     private boolean sessionClosing = false;
+    private boolean endButtonPressed = false;
     private boolean finishActionReady = false;
     private int extraTimersStarted = 0;
     private long extraTimerRemainingSeconds = 0;
@@ -1175,6 +1176,7 @@ public class StudyActivity extends LocalizedActivity {
     }
     private void finishOrEndSession() {
         if (sessionClosing || card == null) return;
+        endButtonPressed = true;
         if (completionReady && card.elapsedToday >= card.dailyMinutes * 60L && !card.doneToday()) {
             markCompleted(card);
             completedThisSession = true;
@@ -1198,7 +1200,8 @@ public class StudyActivity extends LocalizedActivity {
         save();
         if (card.doneToday()) AlarmScheduler.cancelIncompleteReminder(this, card);
         else AlarmScheduler.scheduleIncompleteReminder(this, card);
-        Intent result = new Intent().putExtra("session_completed_today", completedThisSession || card.doneToday());
+        Intent result = new Intent().putExtra("session_completed_today", completedThisSession || card.doneToday())
+                .putExtra("session_end_button_pressed", endButtonPressed);
         setResult(RESULT_OK, result); finish();
     }
 
